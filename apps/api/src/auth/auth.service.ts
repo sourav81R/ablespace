@@ -3,6 +3,7 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { DecodedIdToken } from 'firebase-admin/auth';
 import { AuthProvider, WorkspaceRole } from '@ablespace/shared';
+import { FirebaseUser, toFirebaseUser } from './types/firebase-user';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Workspace, WorkspaceDocument } from '../workspaces/schemas/workspace.schema';
 import { WorkspaceMember } from '../workspaces/schemas/workspace-member.schema';
@@ -36,34 +37,39 @@ export class AuthService {
 
   /**
    * Resolves (and provisions on first sight) the session for a verified token.
+   *
+   * Accepts either the raw decoded token or the already-normalised claims, so
+   * the guard does not have to project them twice.
    */
-  async resolveSession(token: DecodedIdToken): Promise<AuthContext> {
-    const user = await this.findOrCreateUser(token);
+  async resolveSession(token: DecodedIdToken | FirebaseUser): Promise<AuthContext> {
+    const claims = 'firebase' in token ? toFirebaseUser(token) : token;
+
+    const user = await this.findOrCreateUser(claims);
     const { workspace, role } = await this.findOrCreateWorkspace(user);
 
-    return { firebaseUid: token.uid, user, workspace, role };
+    return { firebaseUid: claims.uid, user, workspace, role };
   }
 
-  private async findOrCreateUser(token: DecodedIdToken): Promise<UserDocument> {
-    const existing = await this.userModel.findOne({ firebaseUid: token.uid }).exec();
+  private async findOrCreateUser(claims: FirebaseUser): Promise<UserDocument> {
+    const existing = await this.userModel.findOne({ firebaseUid: claims.uid }).exec();
     if (existing) {
       return existing;
     }
 
-    const profile = this.profileFromToken(token);
+    const profile = this.profileFromClaims(claims);
 
     try {
       const created = await this.userModel.create({
-        firebaseUid: token.uid,
+        firebaseUid: claims.uid,
         ...profile,
       });
-      this.logger.log(`Provisioned user for uid ${token.uid} (${profile.provider})`);
+      this.logger.log(`Provisioned user for uid ${claims.uid} (${profile.provider})`);
       return created;
     } catch (error) {
       // Two concurrent first requests can both miss the read above. The unique
       // index on firebaseUid makes one of them fail; re-reading resolves it.
       if (this.isDuplicateKeyError(error)) {
-        const raced = await this.userModel.findOne({ firebaseUid: token.uid }).exec();
+        const raced = await this.userModel.findOne({ firebaseUid: claims.uid }).exec();
         if (raced) {
           return raced;
         }
@@ -73,12 +79,12 @@ export class AuthService {
   }
 
   /**
-   * Derives the profile from *verified token claims only*.
+   * Derives the profile from *verified claims only*.
    *
-   * Name, email and photo come from Firebase, never from the request body —
-   * otherwise a client could claim any identity it liked.
+   * Name, email and photo come from the Firebase token, never from the request
+   * body — otherwise a client could claim any identity it liked.
    */
-  private profileFromToken(token: DecodedIdToken): {
+  private profileFromClaims(claims: FirebaseUser): {
     email: string | null;
     name: string;
     avatarUrl: string | null;
@@ -87,16 +93,13 @@ export class AuthService {
     username: string | null;
     title: string | null;
   } {
-    const signInProvider = token.firebase?.sign_in_provider;
-    const isAnonymous = signInProvider === 'anonymous';
-
     return {
-      email: token.email ?? null,
-      name: token.name ?? (isAnonymous ? this.guestDisplayName(token.uid) : 'User'),
-      avatarUrl: token.picture ?? null,
-      isGuest: isAnonymous,
-      provider: isAnonymous ? AuthProvider.ANONYMOUS : AuthProvider.GOOGLE,
-      username: isAnonymous ? `guest-${token.uid.slice(0, 6).toLowerCase()}` : null,
+      email: claims.email,
+      name: claims.name ?? (claims.isAnonymous ? this.guestDisplayName(claims.uid) : 'User'),
+      avatarUrl: claims.picture,
+      isGuest: claims.isAnonymous,
+      provider: claims.provider,
+      username: claims.isAnonymous ? `guest-${claims.uid.slice(0, 6).toLowerCase()}` : null,
       title: null,
     };
   }

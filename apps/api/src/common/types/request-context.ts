@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { WorkspaceRole } from '@ablespace/shared';
 import { UserDocument } from '../../users/schemas/user.schema';
 import { WorkspaceDocument } from '../../workspaces/schemas/workspace.schema';
+import { FirebaseUser } from '../../auth/types/firebase-user';
 
 /**
  * The authenticated context attached to a request by FirebaseAuthGuard.
@@ -29,4 +30,11 @@ export interface AuthContext {
  */
 export interface AuthenticatedRequest extends Request {
   auth?: AuthContext;
+  /**
+   * The verified Firebase claims, attached alongside {@link auth}.
+   *
+   * Useful where the raw identity is needed (provider, email verification
+   * status, token lifetime) without a database lookup.
+   */
+  firebaseUser?: FirebaseUser;
 }
