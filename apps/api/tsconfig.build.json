@@ -1,7 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // Incremental builds are disabled here on purpose. nest-cli deletes dist/
+    // before compiling, but a stale .tsbuildinfo still reports every file as
+    // already emitted — so the build "succeeds" with exit code 0 and produces
+    // no output at all. Correctness beats a second or two of build time.
+    "incremental": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]

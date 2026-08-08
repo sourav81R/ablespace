@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
-import { Priority, TaskStatus } from '@ablespace/shared';
+import { ActivityType, Priority, TaskStatus } from '@ablespace/shared';
 import { TasksService } from './tasks.service';
 import { Task } from './schemas/task.schema';
 import { Subtask } from '../subtasks/schemas/subtask.schema';
@@ -45,6 +45,39 @@ describe('TasksService', () => {
     return stub;
   }
 
+  /**
+   * A saveable task document, as `findOne` returns.
+   *
+   * Carries real timestamps because the service serialises the result, and
+   * `save`/`populate` resolve to the document so the service can keep using it.
+   */
+  function updatableTask(overrides: Record<string, unknown> = {}) {
+    const doc = {
+      _id: new Types.ObjectId(),
+      workspaceId,
+      projectId: null,
+      title: 'Original',
+      description: null,
+      status: TaskStatus.TODO,
+      priority: Priority.MEDIUM,
+      reporterId: userId,
+      memberIds: [],
+      labelIds: [],
+      teamIds: [],
+      dueDate: null,
+      resources: [],
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      save: jest.fn(),
+      populate: jest.fn(),
+      ...overrides,
+    };
+    doc.save.mockResolvedValue(doc);
+    doc.populate.mockResolvedValue(doc);
+    return doc;
+  }
+
   let service: TasksService;
   let taskModel: {
     find: jest.Mock;
@@ -55,6 +88,10 @@ describe('TasksService', () => {
     aggregate: jest.Mock;
   };
   let labelsService: { assertLabelsExist: jest.Mock; findIdsByName: jest.Mock };
+  let activityService: { record: jest.Mock; deleteForTask: jest.Mock };
+  let usersService: { assertMembersInWorkspace: jest.Mock };
+  let subtaskModel: { aggregate: jest.Mock; deleteMany: jest.Mock };
+  let commentModel: { aggregate: jest.Mock; deleteMany: jest.Mock };
 
   beforeEach(async () => {
     taskModel = {
@@ -66,7 +103,12 @@ describe('TasksService', () => {
       aggregate: jest.fn(() => queryStub([])),
     };
 
-    const childModel = {
+    // Separate stubs so a deleteMany assertion can tell the two apart.
+    subtaskModel = {
+      aggregate: jest.fn(() => queryStub([])),
+      deleteMany: jest.fn(() => queryStub({ deletedCount: 0 })),
+    };
+    commentModel = {
       aggregate: jest.fn(() => queryStub([])),
       deleteMany: jest.fn(() => queryStub({ deletedCount: 0 })),
     };
@@ -76,22 +118,19 @@ describe('TasksService', () => {
       findIdsByName: jest.fn(async () => []),
     };
 
+    activityService = { record: jest.fn(), deleteForTask: jest.fn() };
+    usersService = { assertMembersInWorkspace: jest.fn(async () => []) };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         TasksService,
         { provide: getModelToken(Task.name), useValue: taskModel },
-        { provide: getModelToken(Subtask.name), useValue: childModel },
-        { provide: getModelToken(Comment.name), useValue: childModel },
-        {
-          provide: UsersService,
-          useValue: { assertMembersInWorkspace: jest.fn(async () => []) },
-        },
+        { provide: getModelToken(Subtask.name), useValue: subtaskModel },
+        { provide: getModelToken(Comment.name), useValue: commentModel },
+        { provide: UsersService, useValue: usersService },
         { provide: LabelsService, useValue: labelsService },
         { provide: ProjectsService, useValue: { assertProjectExists: jest.fn() } },
-        {
-          provide: ActivityService,
-          useValue: { record: jest.fn(), deleteForTask: jest.fn() },
-        },
+        { provide: ActivityService, useValue: activityService },
       ],
     }).compile();
 
@@ -238,6 +277,135 @@ describe('TasksService', () => {
       expect(taskModel.countDocuments).toHaveBeenCalledWith(
         expect.objectContaining({ workspaceId }),
       );
+    });
+  });
+
+  describe('update', () => {
+    it('persists changed fields', async () => {
+      const task = updatableTask();
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.update(auth, task._id.toString(), { title: 'Renamed' });
+
+      expect(task.title).toBe('Renamed');
+      expect(task.save).toHaveBeenCalled();
+    });
+
+    it('stamps completedAt when a task becomes completed', async () => {
+      const task = updatableTask({ status: TaskStatus.DOING });
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.update(auth, task._id.toString(), { status: TaskStatus.COMPLETED });
+
+      expect(task.completedAt).toBeInstanceOf(Date);
+    });
+
+    it('clears completedAt when a task moves back out of completed', async () => {
+      // "When was this finished?" must always have a truthful answer.
+      const task = updatableTask({ status: TaskStatus.COMPLETED, completedAt: new Date() });
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.update(auth, task._id.toString(), { status: TaskStatus.DOING });
+
+      expect(task.completedAt).toBeNull();
+    });
+
+    it('validates members against the workspace before assigning them', async () => {
+      const task = updatableTask();
+      taskModel.findOne.mockReturnValue(queryStub(task));
+      const memberId = new Types.ObjectId().toString();
+
+      await service.update(auth, task._id.toString(), { memberIds: [memberId] });
+
+      expect(usersService.assertMembersInWorkspace).toHaveBeenCalledWith(workspaceId, [memberId]);
+    });
+
+    it('refuses to update a task in another workspace', async () => {
+      taskModel.findOne.mockReturnValue(queryStub(null));
+
+      await expect(
+        service.update(auth, new Types.ObjectId().toString(), { title: 'X' }),
+      ).rejects.toThrow('Task not found');
+    });
+  });
+
+  describe('delete', () => {
+    it('removes the task and everything hanging off it', async () => {
+      // Subtasks, comments and history are meaningless without their parent.
+      const task = { _id: new Types.ObjectId(), workspaceId };
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.remove(auth, task._id.toString());
+
+      expect(subtaskModel.deleteMany).toHaveBeenCalledWith({ taskId: task._id });
+      expect(commentModel.deleteMany).toHaveBeenCalledWith({ taskId: task._id });
+      expect(activityService.deleteForTask).toHaveBeenCalledWith(task._id);
+      expect(taskModel.deleteOne).toHaveBeenCalledWith({ _id: task._id });
+    });
+
+    it('refuses to delete a task in another workspace', async () => {
+      taskModel.findOne.mockReturnValue(queryStub(null));
+
+      await expect(service.remove(auth, new Types.ObjectId().toString())).rejects.toThrow(
+        'Task not found',
+      );
+      expect(taskModel.deleteOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('activity', () => {
+    it('records TASK_CREATED on create', async () => {
+      taskModel.create.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        populate: jest.fn(async () => undefined),
+        workspaceId,
+        reporterId: userId,
+        title: 'New task',
+        description: null,
+        status: TaskStatus.TODO,
+        priority: Priority.NONE,
+        memberIds: [],
+        labelIds: [],
+        teamIds: [],
+        dueDate: null,
+        resources: [],
+        completedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await service.create(auth, { title: 'New task' });
+
+      expect(activityService.record).toHaveBeenCalledWith([
+        expect.objectContaining({ type: ActivityType.TASK_CREATED, actorId: userId }),
+      ]);
+    });
+
+    it('records a STATUS_CHANGED event with before and after values', async () => {
+      const task = updatableTask({ status: TaskStatus.TODO });
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.update(auth, task._id.toString(), { status: TaskStatus.DOING });
+
+      const events = activityService.record.mock.calls.at(-1)?.[0] as Array<{
+        type: ActivityType;
+        metadata?: { from?: unknown; to?: unknown };
+      }>;
+      const statusEvent = events.find((e) => e.type === ActivityType.STATUS_CHANGED);
+
+      expect(statusEvent?.metadata).toMatchObject({
+        from: TaskStatus.TODO,
+        to: TaskStatus.DOING,
+      });
+    });
+
+    it('records no events when an update changes nothing', async () => {
+      const task = updatableTask({ title: 'Same' });
+      taskModel.findOne.mockReturnValue(queryStub(task));
+
+      await service.update(auth, task._id.toString(), { title: 'Same' });
+
+      expect(activityService.record).toHaveBeenCalledWith([]);
     });
   });
 
