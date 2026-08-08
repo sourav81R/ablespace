@@ -112,7 +112,7 @@ runtime error.
 | `PORT` | no | Defaults to `4000` |
 | `API_PREFIX` | no | Route prefix, defaults to `api` |
 | `MONGODB_URI` | **yes** | Connection string, including the database name |
-| `CORS_ORIGINS` | no | Comma-separated allowlist, defaults to `http://localhost:3000` |
+| `CORS_ORIGIN` | **yes** in production | Allowed browser origin(s), comma-separated. Defaults to `http://localhost:3000` outside production; `*` is rejected and an unset value fails the boot in production |
 | `FIREBASE_PROJECT_ID` | **yes** in practice | `project_id` from the service account |
 | `FIREBASE_CLIENT_EMAIL` | **yes** in practice | `client_email` from the service account |
 | `FIREBASE_PRIVATE_KEY` | **yes** in practice | `private_key` PEM block, newlines escaped as `\n` |
@@ -552,7 +552,8 @@ Admin *service account* key is not, and must never enter the repository.
 Checklist:
 
 1. Set every environment variable listed above on the host.
-2. Add the deployed web origin to `CORS_ORIGINS`.
+2. Add the deployed web origin to `CORS_ORIGIN`. Production refuses to start
+   without it, and rejects `*`.
 3. Add the deployed web domain to Firebase → Authentication → Authorized
    domains, or Google sign-in fails silently.
 4. Allow the API host's egress IPs in Atlas Network Access.

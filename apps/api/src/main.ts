@@ -25,12 +25,16 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
 
-  // Explicit origin allowlist rather than a wildcard (PRD §23).
+  // An explicit allowlist, never a wildcard. The list is validated at boot —
+  // production refuses to start with "*" or with no origin configured — so by
+  // this point it is guaranteed non-empty and specific.
   app.enableCors({
-    origin: corsOrigins.length > 0 ? corsOrigins : false,
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // Cache the preflight result for a day so browsers stop re-asking.
+    maxAge: 86_400,
   });
 
   app.useGlobalPipes(

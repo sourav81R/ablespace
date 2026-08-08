@@ -37,9 +37,16 @@ class EnvironmentVariables {
   @IsNotEmpty({ message: 'MONGODB_URI is required' })
   MONGODB_URI: string;
 
+  /**
+   * Allowed browser origin(s). A comma-separated list is accepted so a
+   * deployment can permit, say, a production domain and a preview domain.
+   *
+   * Deliberately has no default: an unset value means no origin is allowed
+   * rather than every origin. See loadConfiguration.
+   */
   @IsString()
   @IsOptional()
-  CORS_ORIGINS: string = 'http://localhost:3000';
+  CORS_ORIGIN?: string;
 
   // ---------------------------------------------------------------------------
   // Firebase Admin credentials.
@@ -147,6 +154,47 @@ export function normalisePrivateKey(raw: string): string {
 }
 
 /**
+ * Resolves the CORS allowlist.
+ *
+ * Two rules:
+ *
+ *  - A wildcard is rejected outright in production. `*` would let any site
+ *    script the API on a signed-in user's behalf, and the assessment's own
+ *    brief forbids unrestricted production CORS. Failing the boot is the right
+ *    response — a deployment that cannot be reached is safer than one that
+ *    anyone can reach.
+ *  - An unset value means *no* origin is allowed, not every origin. Outside
+ *    production it falls back to localhost so development just works.
+ */
+export function resolveCorsOrigins(raw: string | undefined, nodeEnv: NodeEnv): string[] {
+  const origins = (raw ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const isProduction = nodeEnv === 'production';
+
+  if (isProduction && origins.includes('*')) {
+    throw new Error(
+      'CORS_ORIGIN cannot be "*" in production. List the exact origins allowed ' +
+        'to call this API, comma-separated.',
+    );
+  }
+
+  if (origins.length === 0) {
+    if (isProduction) {
+      throw new Error(
+        'CORS_ORIGIN is required in production. Set it to the deployed web ' +
+          "application's origin, e.g. https://your-app.vercel.app",
+      );
+    }
+    return ['http://localhost:3000'];
+  }
+
+  return origins;
+}
+
+/**
  * Validates raw environment variables and projects them into {@link AppConfig}.
  *
  * Registered as the ConfigModule `load` function, so `configService.get('port')`
@@ -178,10 +226,7 @@ export function loadConfiguration(): AppConfig {
     port: validated.PORT,
     apiPrefix: validated.API_PREFIX ?? 'api',
     mongodbUri: validated.MONGODB_URI,
-    corsOrigins: (validated.CORS_ORIGINS ?? '')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    corsOrigins: resolveCorsOrigins(validated.CORS_ORIGIN, validated.NODE_ENV),
     firebase: {
       projectId,
       clientEmail,
