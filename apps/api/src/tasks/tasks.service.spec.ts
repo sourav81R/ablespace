@@ -54,6 +54,7 @@ describe('TasksService', () => {
     deleteOne: jest.Mock;
     aggregate: jest.Mock;
   };
+  let labelsService: { assertLabelsExist: jest.Mock; findIdsByName: jest.Mock };
 
   beforeEach(async () => {
     taskModel = {
@@ -70,6 +71,11 @@ describe('TasksService', () => {
       deleteMany: jest.fn(() => queryStub({ deletedCount: 0 })),
     };
 
+    labelsService = {
+      assertLabelsExist: jest.fn(async () => []),
+      findIdsByName: jest.fn(async () => []),
+    };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         TasksService,
@@ -80,13 +86,7 @@ describe('TasksService', () => {
           provide: UsersService,
           useValue: { assertMembersInWorkspace: jest.fn(async () => []) },
         },
-        {
-          provide: LabelsService,
-          useValue: {
-            assertLabelsExist: jest.fn(async () => []),
-            findIdsByName: jest.fn(async () => []),
-          },
-        },
+        { provide: LabelsService, useValue: labelsService },
         { provide: ProjectsService, useValue: { assertProjectExists: jest.fn() } },
         {
           provide: ActivityService,
@@ -211,6 +211,33 @@ describe('TasksService', () => {
 
       const filter = taskModel.find.mock.calls[0][0];
       expect(filter.$or[0].title.$regex).toBe('\\.\\*');
+    });
+
+    it('includes a label clause when the term matches a label name', async () => {
+      // Labels are stored as ids, so a name search resolves to ids first and
+      // ORs them into the same query rather than post-filtering.
+      const labelId = new Types.ObjectId();
+      labelsService.findIdsByName.mockResolvedValue([labelId]);
+
+      await service.findAll(workspaceId, { search: 'Design' });
+
+      const filter = taskModel.find.mock.calls[0][0];
+      expect(filter.$or).toEqual(expect.arrayContaining([{ labelIds: { $in: [labelId] } }]));
+    });
+
+    it('resolves search entirely in the database query', async () => {
+      // The whole result set must never be pulled into memory to be filtered:
+      // the search term belongs in the query, and paging is applied by Mongo.
+      await service.findAll(workspaceId, { search: 'landing', page: 2, limit: 10 });
+
+      const query = taskModel.find.mock.results[0].value;
+      expect(query.skip).toHaveBeenCalledWith(10);
+      expect(query.limit).toHaveBeenCalledWith(10);
+
+      // The count is a database count, not `results.length`.
+      expect(taskModel.countDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId }),
+      );
     });
   });
 

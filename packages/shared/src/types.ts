@@ -37,7 +37,11 @@ export interface ApiErrorResponse {
   statusCode: number;
   message: string;
   code: string;
-  details?: unknown;
+  /**
+   * Per-field validation messages, or an empty array when the error carries no
+   * detail. Always present so callers can read it unconditionally.
+   */
+  details: unknown[];
   path: string;
   timestamp: string;
 }

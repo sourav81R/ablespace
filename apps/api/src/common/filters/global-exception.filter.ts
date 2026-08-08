@@ -27,6 +27,19 @@ interface MongoServerErrorLike {
   code: number;
 }
 
+/**
+ * Coerces whatever an exception carried as `details` into an array.
+ *
+ * ValidationPipe supplies a string array; an AppException may carry a single
+ * object or nothing. Normalising here means the response shape never varies.
+ */
+function toDetailsArray(details: unknown): unknown[] {
+  if (details === undefined || details === null) {
+    return [];
+  }
+  return Array.isArray(details) ? details : [details];
+}
+
 interface NormalisedError {
   status: number;
   message: string;
@@ -75,13 +88,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode: normalised.status,
       message: normalised.message,
       code: normalised.code,
+      // Always an array, so a client can read `details` unconditionally.
+      details: toDetailsArray(normalised.details),
       path: request.url,
       timestamp: new Date().toISOString(),
     };
-
-    if (normalised.details !== undefined) {
-      body.details = normalised.details;
-    }
 
     response.status(normalised.status).json(body);
   }
