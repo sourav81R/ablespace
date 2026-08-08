@@ -41,18 +41,37 @@ class EnvironmentVariables {
   @IsOptional()
   CORS_ORIGINS: string = 'http://localhost:3000';
 
-  /**
-   * Optional so the API can boot for local schema work without Firebase
-   * credentials. When absent, protected routes reject every request — see
-   * FirebaseService.
-   */
-  @IsString()
-  @IsOptional()
-  FIREBASE_SERVICE_ACCOUNT_BASE64?: string;
+  // ---------------------------------------------------------------------------
+  // Firebase Admin credentials.
+  //
+  // These are the three fields the Admin SDK needs from the service-account
+  // JSON. They are server-side secrets and must never reach the browser — the
+  // web client uses the separate, public Firebase web config instead.
+  //
+  // All three are optional so the API can still boot for local schema work
+  // without them. When they are absent, authenticated routes reject every
+  // request rather than failing silently — see FirebaseService.
+  // ---------------------------------------------------------------------------
 
   @IsString()
   @IsOptional()
   FIREBASE_PROJECT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_CLIENT_EMAIL?: string;
+
+  /**
+   * The PEM private key.
+   *
+   * Most hosting providers cannot store a literal newline in an environment
+   * variable, so the key is normally pasted with the newlines escaped as the
+   * two characters `\` and `n`. {@link normalisePrivateKey} converts those back
+   * before the key reaches the SDK.
+   */
+  @IsString()
+  @IsOptional()
+  FIREBASE_PRIVATE_KEY?: string;
 
   @Type(() => Number)
   @IsInt()
@@ -74,15 +93,57 @@ export interface AppConfig {
   mongodbUri: string;
   corsOrigins: string[];
   firebase: {
-    serviceAccountBase64?: string;
     projectId?: string;
-    /** True when the Admin SDK has enough configuration to verify tokens. */
+    clientEmail?: string;
+    /** Already newline-normalised and ready to hand to the Admin SDK. */
+    privateKey?: string;
+    /** True only when all three credential fields are present. */
     isConfigured: boolean;
   };
   throttle: {
     ttlSeconds: number;
     limit: number;
   };
+}
+
+/**
+ * Restores real newlines in a PEM private key read from an environment
+ * variable.
+ *
+ * A service-account private key is a multi-line PEM block, but most hosting
+ * providers (Render, Railway, Vercel, Docker `--env`) cannot store a literal
+ * newline in an environment variable. The key is therefore pasted with its
+ * newlines escaped as the two characters `\` and `n`, and must be converted
+ * back before the SDK will parse it. Skipping this step produces the classic
+ * `Failed to parse private key: Invalid PEM formatted message` at startup.
+ *
+ * Three input shapes are handled:
+ *  - escaped newlines (`\n` as two characters) — the common case;
+ *  - real newlines — when the platform does support them;
+ *  - a key wrapped in quotes, which some dashboards add on paste.
+ */
+export function normalisePrivateKey(raw: string): string {
+  let key = raw.trim();
+
+  // Strip a single layer of surrounding quotes if the value was pasted as
+  // "-----BEGIN...-----\n..." rather than bare.
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+
+  // The substitution that matters: two-character \n sequences become real
+  // newlines. Keys that already contain real newlines are unaffected.
+  key = key.replace(/\\n/g, '\n');
+
+  // Some editors convert to CRLF; the PEM parser expects LF.
+  key = key.replace(/\r\n/g, '\n');
+
+  // OpenSSL requires the final newline after the footer.
+  if (!key.endsWith('\n')) {
+    key += '\n';
+  }
+
+  return key;
 }
 
 /**
@@ -106,7 +167,10 @@ export function loadConfiguration(): AppConfig {
     throw new Error(`Invalid environment configuration:\n  - ${details}`);
   }
 
-  const serviceAccountBase64 = validated.FIREBASE_SERVICE_ACCOUNT_BASE64?.trim();
+  const projectId = validated.FIREBASE_PROJECT_ID?.trim() || undefined;
+  const clientEmail = validated.FIREBASE_CLIENT_EMAIL?.trim() || undefined;
+  const rawPrivateKey = validated.FIREBASE_PRIVATE_KEY;
+  const privateKey = rawPrivateKey ? normalisePrivateKey(rawPrivateKey) : undefined;
 
   return {
     nodeEnv: validated.NODE_ENV,
@@ -119,9 +183,12 @@ export function loadConfiguration(): AppConfig {
       .map((origin) => origin.trim())
       .filter(Boolean),
     firebase: {
-      serviceAccountBase64: serviceAccountBase64 || undefined,
-      projectId: validated.FIREBASE_PROJECT_ID?.trim() || undefined,
-      isConfigured: Boolean(serviceAccountBase64),
+      projectId,
+      clientEmail,
+      privateKey,
+      // All three are required together — a partial credential set cannot
+      // verify a token, so it counts as unconfigured rather than half-working.
+      isConfigured: Boolean(projectId && clientEmail && privateKey),
     },
     throttle: {
       ttlSeconds: validated.THROTTLE_TTL_SECONDS,

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { App, cert, deleteApp, getApps, initializeApp } from 'firebase-admin/app';
 import { DecodedIdToken, getAuth } from 'firebase-admin/auth';
@@ -9,34 +9,54 @@ import { ErrorCode } from '../common/types/error-codes';
 const FIREBASE_TOKEN_EXPIRED = 'auth/id-token-expired';
 const FIREBASE_TOKEN_REVOKED = 'auth/id-token-revoked';
 
+/** Named so a watch-mode reload can find and replace its own previous instance. */
+const APP_NAME = 'ablespace-admin';
+
 /**
- * Wraps the Firebase Admin SDK.
+ * The Firebase Admin provider.
  *
- * This is the only place in the application that talks to Firebase. Everything
- * downstream deals in verified UIDs, never in raw tokens.
+ * This is the only place in the application that touches the Admin SDK or the
+ * service-account credentials. Everything downstream deals in verified UIDs,
+ * never in raw tokens or keys.
+ *
+ * These credentials are server-side secrets and must never be sent to the
+ * browser. The web client authenticates with the separate Firebase *web*
+ * config (apiKey, authDomain, …), which is public by design; the private key
+ * held here can mint tokens for any user in the project, so it stays on the
+ * server.
  */
 @Injectable()
-export class FirebaseService implements OnModuleInit {
+export class FirebaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(FirebaseService.name);
   private app: App | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
-    const isConfigured = this.config.get<boolean>('firebase.isConfigured');
-
-    if (!isConfigured) {
-      // Deliberately a warning, not a crash: the API should still boot so that
-      // /health and local schema work function. Protected routes will reject
-      // every request until credentials are supplied.
+    if (!this.config.get<boolean>('firebase.isConfigured')) {
+      // A warning rather than a crash: the API should still boot so /health and
+      // local schema work function. Authenticated routes reject every request
+      // until credentials are supplied.
       this.logger.warn(
-        'FIREBASE_SERVICE_ACCOUNT_BASE64 is not set — authenticated routes will reject all requests.',
+        'Firebase Admin is not configured (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL ' +
+          'and FIREBASE_PRIVATE_KEY are all required) — authenticated routes will ' +
+          'reject all requests.',
       );
       return;
     }
 
     this.app = this.initialiseApp();
-    this.logger.log('Firebase Admin SDK initialised');
+    this.logger.log(
+      `Firebase Admin initialised for project "${this.config.get<string>('firebase.projectId')}"`,
+    );
+  }
+
+  /** Releases the SDK's HTTP connections so a redeploy shuts down cleanly. */
+  async onModuleDestroy(): Promise<void> {
+    if (this.app) {
+      await deleteApp(this.app).catch(() => undefined);
+      this.app = null;
+    }
   }
 
   /** True when the SDK is ready to verify tokens. */
@@ -47,9 +67,9 @@ export class FirebaseService implements OnModuleInit {
   /**
    * Verifies a Firebase ID token and returns its decoded claims.
    *
-   * `checkRevoked` is intentionally left off: it costs a network round-trip to
-   * Firebase on every request, and for this application signing out on the
-   * client is sufficient. Short token lifetimes (1 hour) bound the exposure.
+   * `checkRevoked` is intentionally not enabled: it costs a network round-trip
+   * to Firebase on every request, and client-side sign-out is sufficient here.
+   * The one-hour token lifetime bounds the exposure.
    */
   async verifyIdToken(idToken: string): Promise<DecodedIdToken> {
     if (!this.app) {
@@ -67,75 +87,65 @@ export class FirebaseService implements OnModuleInit {
     }
   }
 
+  /**
+   * Builds the Admin app from the three discrete credential variables.
+   *
+   * The private key has already been newline-normalised in the configuration
+   * layer, so it can be handed to `cert()` as-is.
+   */
   private initialiseApp(): App {
-    const base64 = this.config.getOrThrow<string>('firebase.serviceAccountBase64');
-    const serviceAccount = this.decodeServiceAccount(base64);
+    const projectId = this.config.getOrThrow<string>('firebase.projectId');
+    const clientEmail = this.config.getOrThrow<string>('firebase.clientEmail');
+    const privateKey = this.config.getOrThrow<string>('firebase.privateKey');
 
-    // Reuse an existing named app if one survived a hot reload in watch mode.
-    const existing = getApps().find((app) => app.name === 'ablespace-admin');
+    this.assertKeyLooksValid(privateKey);
+
+    // Watch mode re-runs this without tearing down the process, and Firebase
+    // throws on a duplicate app name — so retire any previous instance first.
+    const existing = getApps().find((app) => app.name === APP_NAME);
     if (existing) {
       void deleteApp(existing).catch(() => undefined);
     }
 
-    return initializeApp(
-      {
-        credential: cert({
-          projectId: serviceAccount.project_id,
-          clientEmail: serviceAccount.client_email,
-          privateKey: serviceAccount.private_key,
-        }),
-        projectId: serviceAccount.project_id,
-      },
-      'ablespace-admin',
-    );
+    try {
+      return initializeApp(
+        { credential: cert({ projectId, clientEmail, privateKey }), projectId },
+        APP_NAME,
+      );
+    } catch (error) {
+      // Surface a message that names the likely cause, since the SDK's own
+      // "Invalid PEM formatted message" gives no hint about what to fix.
+      throw new Error(
+        'Failed to initialise Firebase Admin. Check that FIREBASE_PRIVATE_KEY ' +
+          'contains the full PEM block and that its newlines are written as \\n. ' +
+          `Underlying error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**
-   * Decodes the base64 service-account JSON.
+   * Fails fast on a key that is obviously malformed.
    *
-   * Base64 is used because the PEM private key contains newlines, which most
-   * hosting providers' environment-variable editors corrupt.
+   * Without this the SDK accepts the value at startup and only fails on the
+   * first verification attempt, which surfaces as a confusing 500 on a user's
+   * login rather than an obvious boot error.
    */
-  private decodeServiceAccount(base64: string): ServiceAccountJson {
-    let parsed: unknown;
-
-    try {
-      parsed = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-    } catch {
+  private assertKeyLooksValid(privateKey: string): void {
+    if (!privateKey.includes('-----BEGIN') || !privateKey.includes('-----END')) {
       throw new Error(
-        'FIREBASE_SERVICE_ACCOUNT_BASE64 is not valid base64-encoded JSON. ' +
-          'Re-encode the service account file downloaded from the Firebase console.',
+        'FIREBASE_PRIVATE_KEY does not look like a PEM block. It must include the ' +
+          '"-----BEGIN PRIVATE KEY-----" and "-----END PRIVATE KEY-----" lines.',
       );
     }
 
-    if (!this.isServiceAccountJson(parsed)) {
+    // After normalisation a real key is many lines. A single line means the \n
+    // sequences were not converted — the most common misconfiguration.
+    if (!privateKey.includes('\n')) {
       throw new Error(
-        'FIREBASE_SERVICE_ACCOUNT_BASE64 is missing required fields ' +
-          '(project_id, client_email, private_key).',
+        'FIREBASE_PRIVATE_KEY contains no line breaks after normalisation. ' +
+          'Ensure the value uses \\n escape sequences between PEM lines.',
       );
     }
-
-    const configuredProjectId = this.config.get<string>('firebase.projectId');
-    if (configuredProjectId && configuredProjectId !== parsed.project_id) {
-      throw new Error(
-        `FIREBASE_PROJECT_ID ("${configuredProjectId}") does not match the service ` +
-          `account project ("${parsed.project_id}").`,
-      );
-    }
-
-    return parsed;
-  }
-
-  private isServiceAccountJson(value: unknown): value is ServiceAccountJson {
-    if (typeof value !== 'object' || value === null) {
-      return false;
-    }
-    const candidate = value as Record<string, unknown>;
-    return (
-      typeof candidate.project_id === 'string' &&
-      typeof candidate.client_email === 'string' &&
-      typeof candidate.private_key === 'string'
-    );
   }
 
   private translateVerificationError(error: unknown): AppException {
@@ -145,8 +155,8 @@ export class FirebaseService implements OnModuleInit {
         : '';
 
     if (code === FIREBASE_TOKEN_EXPIRED || code === FIREBASE_TOKEN_REVOKED) {
-      // The client SDK can refresh and retry, so this is distinguishable from a
-      // token that was never valid.
+      // Distinguished from an invalid token so the client can refresh and retry
+      // silently instead of forcing the user back to the login screen.
       return AppException.unauthenticated(
         'Your session has expired. Please sign in again.',
         ErrorCode.TOKEN_EXPIRED,
@@ -156,11 +166,4 @@ export class FirebaseService implements OnModuleInit {
     this.logger.warn(`Token verification failed: ${code || 'unknown error'}`);
     return AppException.unauthenticated('Invalid authentication token', ErrorCode.TOKEN_INVALID);
   }
-}
-
-/** The subset of the service-account file we actually need. */
-interface ServiceAccountJson {
-  project_id: string;
-  client_email: string;
-  private_key: string;
 }

@@ -113,38 +113,59 @@ runtime error.
 | `API_PREFIX` | no | Route prefix, defaults to `api` |
 | `MONGODB_URI` | **yes** | Connection string, including the database name |
 | `CORS_ORIGINS` | no | Comma-separated allowlist, defaults to `http://localhost:3000` |
-| `FIREBASE_SERVICE_ACCOUNT_BASE64` | **yes** in practice | Base64-encoded service account JSON |
-| `FIREBASE_PROJECT_ID` | no | Cross-checked against the service account |
+| `FIREBASE_PROJECT_ID` | **yes** in practice | `project_id` from the service account |
+| `FIREBASE_CLIENT_EMAIL` | **yes** in practice | `client_email` from the service account |
+| `FIREBASE_PRIVATE_KEY` | **yes** in practice | `private_key` PEM block, newlines escaped as `\n` |
 | `THROTTLE_TTL_SECONDS` | no | Rate-limit window, defaults to `60` |
 | `THROTTLE_LIMIT` | no | Requests per window per IP, defaults to `120` |
 
-### Obtaining the Firebase service account
+### Obtaining the Firebase Admin credentials
 
-The web SDK config (`apiKey`, `authDomain`, …) is **not** what the server needs.
-The Admin SDK requires a private key:
+The web SDK config (`apiKey`, `authDomain`, …) is **not** what the server needs
+— that one is public and belongs in the browser. The Admin SDK requires a
+service-account private key, which is a server-side secret.
 
 1. Firebase Console → Project Settings → **Service Accounts**
 2. **Generate new private key** → downloads a JSON file
-3. Base64-encode it:
+3. Copy three fields out of that JSON into your `.env`:
 
-```powershell
-# PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("service-account.json"))
+| JSON field | Environment variable |
+| --- | --- |
+| `project_id` | `FIREBASE_PROJECT_ID` |
+| `client_email` | `FIREBASE_CLIENT_EMAIL` |
+| `private_key` | `FIREBASE_PRIVATE_KEY` |
+
+```dotenv
+FIREBASE_PROJECT_ID=ablespace-c0b4d
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@ablespace-c0b4d.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq...\n-----END PRIVATE KEY-----\n"
 ```
 
-```bash
-# Linux / macOS
-base64 -w0 service-account.json
-```
+#### The private key newline problem
 
-4. Paste the result into `FIREBASE_SERVICE_ACCOUNT_BASE64`.
+`private_key` is a multi-line PEM block, but environment variables generally
+cannot hold real newlines. The value is therefore stored with its newlines
+escaped as the two characters `\` and `n` — which is exactly how it already
+appears inside the downloaded JSON, so copying it verbatim gives the right
+form. Keep it on one line and wrap it in double quotes.
 
-Base64 is used because the PEM private key contains newlines, which most hosting
-providers' environment-variable editors corrupt.
+`normalisePrivateKey()` in `src/config/configuration.ts` converts those escapes
+back to real newlines at boot, and also handles stray surrounding quotes, CRLF
+line endings, and a missing trailing newline. Without that conversion the SDK
+fails with `Failed to parse private key: Invalid PEM formatted message`.
 
-Without this variable the API still boots (so `/health` and local schema work
-function), but every authenticated route responds `503` — this is logged loudly
-at startup.
+The key is validated at startup rather than on first use, so a malformed value
+fails the boot with a message naming the likely cause — not a confusing `500`
+on a user's first login.
+
+If any of the three variables is missing the API still boots (so `/health` and
+local schema work function), but every authenticated route responds `503`. This
+is logged loudly at startup. A partial credential set counts as unconfigured:
+all three are required together.
+
+**Never expose these to the browser.** The private key can mint tokens for any
+user in the project. `.gitignore` blocks `.env`, `*-service-account*.json` and
+`firebase-adminsdk*.json` as a second line of defence.
 
 ---
 
@@ -447,8 +468,9 @@ are configured; this needs one `pnpm dev:api` run followed by
 Stated plainly rather than left to be discovered:
 
 1. **No live database round-trip yet** — see above. Everything else is verified.
-2. **`FIREBASE_SERVICE_ACCOUNT_BASE64` is not yet populated.** Until the service
-   account key is generated and encoded, authenticated routes return `503`.
+2. **The Firebase Admin credentials are not yet populated.** Until
+   `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` are filled in from the
+   service-account JSON, authenticated routes return `503`.
 3. **No integration or E2E tests.** `mongodb-memory-server` could not download
    its MongoDB binary in this environment. The intended coverage — guest
    provisioning, task CRUD, each filter facet, and cross-workspace access denial
