@@ -26,6 +26,14 @@
 
     "strictPropertyInitialization": false,
 
+    // Ambient type packages available to every file in this project.
+    //
+    // Declared explicitly rather than left to automatic @types discovery: this
+    // is the config an editor loads for a .spec.ts file, and without `jest`
+    // here the language server reports `describe`, `it` and `expect` as
+    // undefined even though the command-line typecheck passes.
+    "types": ["node", "jest"],
+
     // Resolve the shared package to its compiled output rather than its source.
     // Pointing at src/ would pull files outside this project's rootDir into the
     // build and produce a nested dist/apps/api/src/ layout, breaking start:prod.

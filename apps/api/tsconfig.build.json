@@ -2,6 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": "./src",
+    // Jest types are deliberately dropped here: the production build contains
+    // no test files, so nothing should be able to reference describe/it/expect.
+    "types": ["node"],
     // Incremental builds are disabled here on purpose. nest-cli deletes dist/
     // before compiling, but a stale .tsbuildinfo still reports every file as
     // already emitted — so the build "succeeds" with exit code 0 and produces

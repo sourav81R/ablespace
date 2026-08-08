@@ -32,6 +32,9 @@ pnpm-debug.log*
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json
+# Shared editor settings: pins the TypeScript version and the tsconfig used for
+# test files, so specs do not show phantom "cannot find name 'describe'" errors.
+!.vscode/settings.json
 .idea/
 .DS_Store
 Thumbs.db

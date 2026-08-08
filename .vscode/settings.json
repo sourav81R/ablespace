@@ -1,0 +1,36 @@
+{
+  // Use the TypeScript version installed in the repo rather than the one
+  // bundled with VS Code. A version mismatch is a common source of errors that
+  // appear in the editor but not from `pnpm typecheck`.
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  // Surface type errors for files the open editor has not opened yet, so a
+  // broken spec is visible without clicking into it.
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true,
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  "eslint.workingDirectories": [{ "directory": "apps/api", "changeProcessCwd": true }],
+
+  // Keep build output and dependencies out of search and the file watcher.
+  "files.exclude": {
+    "**/dist": true,
+    "**/.turbo": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/pnpm-lock.yaml": true
+  }
+}
