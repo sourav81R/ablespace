@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    // "node16" replaces the deprecated "node10" resolution mode, which stops
+    // working in TypeScript 7.0. `module` and `moduleResolution` must move
+    // together — node16 resolution requires node16 module. Output is still
+    // CommonJS, because this package has no "type": "module" in its
+    // package.json, so nothing downstream changes.
+    "module": "node16",
+    "moduleResolution": "node16",
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
