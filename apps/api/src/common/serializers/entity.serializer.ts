@@ -52,11 +52,11 @@ export function serialiseUser(user: UserDocument): UserDto {
   return {
     id: toId(user._id),
     email: user.email,
-    name: user.name,
+    displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     title: user.title,
     username: user.username,
-    isGuest: user.isGuest,
+    isAnonymous: user.isAnonymous,
     provider: user.provider,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),

@@ -346,8 +346,8 @@ Eight collections. There is deliberately no `sessions` collection — Firebase
 owns session state.
 
 ```
-users              firebaseUid (unique), email, name, avatarUrl, title,
-                   username, isGuest, provider
+users              firebaseUid (unique), email, displayName, avatarUrl, title,
+                   username, isAnonymous, provider
 workspaces         name, createdBy
 workspace_members  workspaceId, userId, role          (unique per pair)
 labels             workspaceId, name (unique per workspace), color
@@ -391,7 +391,8 @@ workspace boundary.
 tasks              { workspaceId, status }      { workspaceId, projectId }
                    { workspaceId, dueDate }     { workspaceId, updatedAt }
                    { workspaceId, memberIds }   text index on title/description
-users              { firebaseUid } unique
+users              { firebaseUid } unique   { email } sparse
+                   { username } unique sparse
 workspace_members  { workspaceId, userId } unique
 labels             { workspaceId, name } unique
 subtasks           { taskId, order, createdAt }

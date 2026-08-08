@@ -43,13 +43,15 @@ export interface ApiErrorResponse {
 }
 
 export interface UserDto {
+  /** The application's internal identity (MongoDB `_id`). */
   id: string;
   email: string | null;
-  name: string;
+  displayName: string;
   avatarUrl: string | null;
   title: string | null;
   username: string | null;
-  isGuest: boolean;
+  /** True for Firebase Anonymous Authentication (guest login). */
+  isAnonymous: boolean;
   provider: AuthProvider;
   createdAt: string;
   updatedAt: string;

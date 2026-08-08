@@ -86,18 +86,18 @@ export class AuthService {
    */
   private profileFromClaims(claims: FirebaseUser): {
     email: string | null;
-    name: string;
+    displayName: string;
     avatarUrl: string | null;
-    isGuest: boolean;
+    isAnonymous: boolean;
     provider: AuthProvider;
     username: string | null;
     title: string | null;
   } {
     return {
       email: claims.email,
-      name: claims.name ?? (claims.isAnonymous ? this.guestDisplayName(claims.uid) : 'User'),
+      displayName: claims.name ?? (claims.isAnonymous ? this.guestDisplayName(claims.uid) : 'User'),
       avatarUrl: claims.picture,
-      isGuest: claims.isAnonymous,
+      isAnonymous: claims.isAnonymous,
       provider: claims.provider,
       username: claims.isAnonymous ? `guest-${claims.uid.slice(0, 6).toLowerCase()}` : null,
       title: null,
@@ -128,12 +128,12 @@ export class AuthService {
       return user;
     }
 
-    const wasGuest = user.isGuest;
+    const wasAnonymous = user.isAnonymous;
     let changed = false;
 
     // The account was upgraded from anonymous to a real provider.
-    if (wasGuest) {
-      user.isGuest = false;
+    if (wasAnonymous) {
+      user.isAnonymous = false;
       user.provider = claims.provider;
       changed = true;
     } else if (user.provider !== claims.provider) {
@@ -148,14 +148,14 @@ export class AuthService {
 
     // Adopt the provider's name only while the user has not set their own.
     // After an upgrade the placeholder guest name must be replaced.
-    if (claims.name && (wasGuest || !user.name || user.name === 'User')) {
-      user.name = claims.name;
+    if (claims.name && (wasAnonymous || !user.displayName || user.displayName === 'User')) {
+      user.displayName = claims.name;
       changed = true;
     }
 
     // Same rule for the avatar: provider data fills a gap, never overwrites a
     // picture the user chose in this product.
-    if (claims.picture && (wasGuest || !user.avatarUrl)) {
+    if (claims.picture && (wasAnonymous || !user.avatarUrl)) {
       user.avatarUrl = claims.picture;
       changed = true;
     }
@@ -166,9 +166,9 @@ export class AuthService {
 
     await user.save();
 
-    if (wasGuest) {
+    if (wasAnonymous) {
       this.logger.log(
-        `Upgraded guest ${claims.uid} to ${claims.provider}; workspace and data preserved`,
+        `Upgraded anonymous user ${claims.uid} to ${claims.provider}; workspace and data preserved`,
       );
     }
 
@@ -248,7 +248,7 @@ export class AuthService {
   }
 
   private workspaceNameFor(user: UserDocument): string {
-    const first = user.name.split(' ')[0]?.trim();
+    const first = user.displayName.split(' ')[0]?.trim();
     return first ? `${first}'s Workspace` : 'My Workspace';
   }
 

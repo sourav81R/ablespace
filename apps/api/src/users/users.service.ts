@@ -22,8 +22,8 @@ export class UsersService {
       user.username = dto.username;
     }
 
-    if (dto.name !== undefined) {
-      user.name = dto.name;
+    if (dto.displayName !== undefined) {
+      user.displayName = dto.displayName;
     }
 
     if (dto.title !== undefined) {

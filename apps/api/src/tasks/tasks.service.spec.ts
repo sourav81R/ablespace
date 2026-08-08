@@ -30,7 +30,7 @@ describe('TasksService', () => {
 
   const auth = {
     firebaseUid: 'uid-123',
-    user: { _id: userId, name: 'Demo' } as UserDocument,
+    user: { _id: userId, displayName: 'Demo' } as UserDocument,
     workspace: { _id: workspaceId, name: 'Demo Workspace' } as WorkspaceDocument,
     role: WorkspaceRole.OWNER,
   } as AuthContext;

@@ -60,11 +60,11 @@ describe('AuthService', () => {
       _id: userId,
       firebaseUid: 'anon-uid-1',
       email: null,
-      name: 'Guest ANON',
+      displayName: 'Guest ANON',
       avatarUrl: null,
       title: null,
       username: 'guest-anon-u',
-      isGuest: true,
+      isAnonymous: true,
       provider: AuthProvider.ANONYMOUS,
       save: jest.fn(async function (this: unknown) {
         return this;
@@ -122,7 +122,7 @@ describe('AuthService', () => {
       expect(userModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
           firebaseUid: 'anon-uid-1',
-          isGuest: true,
+          isAnonymous: true,
           provider: AuthProvider.ANONYMOUS,
         }),
       );
@@ -147,7 +147,7 @@ describe('AuthService', () => {
       await service.resolveSession(guestClaims);
 
       const created = userModel.create.mock.calls[0][0];
-      expect(created.name).toMatch(/^Guest /);
+      expect(created.displayName).toMatch(/^Guest /);
       expect(created.username).toBe('guest-anon-u');
     });
 
@@ -178,13 +178,13 @@ describe('AuthService', () => {
       await service.resolveSession(guestClaims);
 
       expect(existing.save).not.toHaveBeenCalled();
-      expect(existing.name).toBe('Guest ANON');
+      expect(existing.displayName).toBe('Guest ANON');
     });
   });
 
   describe('Google login', () => {
     it('creates a non-guest user preserving uid, email, name and avatar', async () => {
-      userModel.create.mockResolvedValue(userDoc({ isGuest: false }));
+      userModel.create.mockResolvedValue(userDoc({ isAnonymous: false }));
 
       await service.resolveSession(googleClaims);
 
@@ -192,9 +192,9 @@ describe('AuthService', () => {
         expect.objectContaining({
           firebaseUid: 'google-uid-1',
           email: 'demo@example.com',
-          name: 'Demo User',
+          displayName: 'Demo User',
           avatarUrl: 'https://example.com/photo.png',
-          isGuest: false,
+          isAnonymous: false,
           provider: AuthProvider.GOOGLE,
         }),
       );
@@ -203,10 +203,10 @@ describe('AuthService', () => {
     it('adopts a changed Google display name', async () => {
       const existing = userDoc({
         firebaseUid: 'google-uid-1',
-        isGuest: false,
+        isAnonymous: false,
         provider: AuthProvider.GOOGLE,
         email: 'demo@example.com',
-        name: 'User',
+        displayName: 'User',
       });
       userModel.findOne.mockReturnValue(queryStub(existing));
       memberModel.findOne.mockReturnValue(
@@ -216,17 +216,17 @@ describe('AuthService', () => {
 
       await service.resolveSession(googleClaims);
 
-      expect(existing.name).toBe('Demo User');
+      expect(existing.displayName).toBe('Demo User');
       expect(existing.save).toHaveBeenCalled();
     });
 
     it('does not overwrite a name the user set themselves', async () => {
       const existing = userDoc({
         firebaseUid: 'google-uid-1',
-        isGuest: false,
+        isAnonymous: false,
         provider: AuthProvider.GOOGLE,
         email: 'demo@example.com',
-        name: 'My Chosen Name',
+        displayName: 'My Chosen Name',
         avatarUrl: 'https://example.com/mine.png',
       });
       userModel.findOne.mockReturnValue(queryStub(existing));
@@ -237,7 +237,7 @@ describe('AuthService', () => {
 
       await service.resolveSession(googleClaims);
 
-      expect(existing.name).toBe('My Chosen Name');
+      expect(existing.displayName).toBe('My Chosen Name');
       expect(existing.avatarUrl).toBe('https://example.com/mine.png');
     });
 
@@ -253,10 +253,10 @@ describe('AuthService', () => {
 
       const context = await service.resolveSession(googleClaims);
 
-      expect(existing.isGuest).toBe(false);
+      expect(existing.isAnonymous).toBe(false);
       expect(existing.provider).toBe(AuthProvider.GOOGLE);
       expect(existing.email).toBe('demo@example.com');
-      expect(existing.name).toBe('Demo User');
+      expect(existing.displayName).toBe('Demo User');
       expect(existing.avatarUrl).toBe('https://example.com/photo.png');
       expect(existing.save).toHaveBeenCalled();
       // Same workspace, not a new one.
@@ -267,10 +267,10 @@ describe('AuthService', () => {
     it('makes no write when nothing changed', async () => {
       const existing = userDoc({
         firebaseUid: 'google-uid-1',
-        isGuest: false,
+        isAnonymous: false,
         provider: AuthProvider.GOOGLE,
         email: 'demo@example.com',
-        name: 'Demo User',
+        displayName: 'Demo User',
         avatarUrl: 'https://example.com/photo.png',
       });
       userModel.findOne.mockReturnValue(queryStub(existing));
@@ -288,7 +288,7 @@ describe('AuthService', () => {
 
   describe('identity source', () => {
     it('derives the user only from verified claims', async () => {
-      userModel.create.mockResolvedValue(userDoc({ isGuest: false }));
+      userModel.create.mockResolvedValue(userDoc({ isAnonymous: false }));
 
       await service.resolveSession(googleClaims);
 

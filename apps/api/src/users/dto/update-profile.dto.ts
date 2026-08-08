@@ -4,17 +4,17 @@ import { IsOptional, IsString, IsUrl, Matches, MaxLength, MinLength } from 'clas
 /**
  * Editable profile fields.
  *
- * `email`, `isGuest` and `provider` are intentionally not editable — they come
- * from the verified Firebase token, and letting a client change them would let
- * it rewrite its own identity.
+ * `email`, `isAnonymous` and `provider` are intentionally not editable — they
+ * come from the verified Firebase token, and letting a client change them would
+ * let it rewrite its own identity.
  */
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()
-  @MinLength(1, { message: 'Name cannot be empty' })
+  @MinLength(1, { message: 'Display name cannot be empty' })
   @MaxLength(120)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  name?: string;
+  displayName?: string;
 
   @IsOptional()
   @IsString()

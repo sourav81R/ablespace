@@ -14,18 +14,24 @@ export type UserDocument = HydratedDocument<User>;
 @Schema({ timestamps: true, collection: 'users' })
 export class User {
   /**
-   * The Firebase UID from the verified ID token. This is the join key between
-   * Firebase and our database and is never accepted from a request body.
+   * The Firebase UID from the verified ID token.
+   *
+   * Firebase is the identity source; this is the join key between it and our
+   * database, and it is never accepted from a request body. The document's
+   * `_id` remains the application's own internal identity — every foreign key
+   * in the system references that, not the UID, so the database does not depend
+   * on the identity provider's key format.
    */
   @Prop({ required: true, unique: true, index: true })
   firebaseUid: string;
 
-  /** Anonymous guests have no email; Google users do. */
+  /** Anonymous users have no email; Google users do. */
   @Prop({ type: String, default: null })
   email: string | null;
 
+  /** The name shown throughout the UI. */
   @Prop({ required: true, trim: true, maxlength: 120 })
-  name: string;
+  displayName: string;
 
   @Prop({ type: String, default: null })
   avatarUrl: string | null;
@@ -37,8 +43,9 @@ export class User {
   @Prop({ type: String, default: null, maxlength: 60 })
   username: string | null;
 
+  /** True for Firebase Anonymous Authentication (guest login). */
   @Prop({ required: true, default: false })
-  isGuest: boolean;
+  isAnonymous: boolean;
 
   @Prop({
     type: String,
@@ -54,3 +61,16 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Email lookup, used when resolving a person by address rather than by UID.
+//
+// Sparse rather than plain: anonymous users have no email, and a non-sparse
+// index would store an entry for every one of them under `null`. Not unique
+// either — Firebase already guarantees one account per address, and a unique
+// index here would reject the many legitimate `null` values.
+UserSchema.index({ email: 1 }, { sparse: true });
+
+// Username is optional but must identify exactly one person when set. `sparse`
+// keeps the uniqueness constraint from applying to users who have not chosen
+// one.
+UserSchema.index({ username: 1 }, { unique: true, sparse: true });

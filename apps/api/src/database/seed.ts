@@ -67,11 +67,11 @@ async function seed(): Promise<void> {
       user = await userModel.create({
         firebaseUid,
         email: 'demo@ablespace.test',
-        name: 'Demo User',
+        displayName: 'Demo User',
         avatarUrl: null,
         title: 'Product Designer',
         username: 'demo',
-        isGuest: firebaseUid === DEFAULT_DEMO_UID,
+        isAnonymous: firebaseUid === DEFAULT_DEMO_UID,
         provider: AuthProvider.ANONYMOUS,
       });
       logger.log(`Created demo user (${firebaseUid})`);

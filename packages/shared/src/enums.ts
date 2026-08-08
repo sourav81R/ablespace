@@ -23,10 +23,52 @@ export enum Priority {
   LOW = 'LOW',
 }
 
-/** Role within a workspace. Kept deliberately small for the assessment scope. */
+/**
+ * Role within a workspace.
+ *
+ * Deliberately two values: everything the product does today is either "manage
+ * the workspace itself" or "work inside it". Adding a role later means adding
+ * an enum member and a capability entry below — no call site changes, because
+ * permission checks ask {@link roleAllows} rather than comparing roles.
+ */
 export enum WorkspaceRole {
   OWNER = 'OWNER',
   MEMBER = 'MEMBER',
+}
+
+/**
+ * Things a role may be permitted to do.
+ *
+ * Checking a capability rather than a role is what keeps the system
+ * extensible: `roleAllows(role, Capability.DELETE_WORKSPACE)` stays correct
+ * when a third role appears, whereas `role === OWNER` scattered through the
+ * codebase would all need revisiting.
+ */
+export enum Capability {
+  /** Create, edit and delete tasks, projects, labels, comments, subtasks. */
+  MANAGE_CONTENT = 'MANAGE_CONTENT',
+  /** Rename the workspace and change its settings. */
+  MANAGE_WORKSPACE = 'MANAGE_WORKSPACE',
+  /** Invite or remove other members. */
+  MANAGE_MEMBERS = 'MANAGE_MEMBERS',
+  /** Delete the workspace outright. */
+  DELETE_WORKSPACE = 'DELETE_WORKSPACE',
+}
+
+/** Which capabilities each role carries. */
+const ROLE_CAPABILITIES: Record<WorkspaceRole, ReadonlySet<Capability>> = {
+  [WorkspaceRole.OWNER]: new Set([
+    Capability.MANAGE_CONTENT,
+    Capability.MANAGE_WORKSPACE,
+    Capability.MANAGE_MEMBERS,
+    Capability.DELETE_WORKSPACE,
+  ]),
+  [WorkspaceRole.MEMBER]: new Set([Capability.MANAGE_CONTENT]),
+};
+
+/** True when the role carries the capability. */
+export function roleAllows(role: WorkspaceRole, capability: Capability): boolean {
+  return ROLE_CAPABILITIES[role]?.has(capability) ?? false;
 }
 
 /** How the user authenticated with Firebase. */
