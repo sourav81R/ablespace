@@ -263,7 +263,7 @@ async function seed(): Promise<void> {
         labelIds: seedTask.labels
           .map((name) => labelBy.get(name))
           .filter((id): id is Types.ObjectId => Boolean(id)),
-        teams: [],
+        teamIds: [],
         dueDate: seedTask.dueInDays === null ? null : daysFromNow(seedTask.dueInDays),
         resources: [],
         completedAt: seedTask.status === TaskStatus.COMPLETED ? daysFromNow(-2) : null,

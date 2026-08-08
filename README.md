@@ -353,7 +353,7 @@ workspace_members  workspaceId, userId, role          (unique per pair)
 labels             workspaceId, name (unique per workspace), color
 projects           workspaceId, name, description, priority, leadId, dueDate
 tasks              workspaceId, projectId, title, description, status,
-                   priority, reporterId, memberIds[], labelIds[], teams[],
+                   priority, reporterId, memberIds[], labelIds[], teamIds[],
                    dueDate, resources[], completedAt
 subtasks           taskId, workspaceId, title, status, priority, memberId,
                    dueDate, order

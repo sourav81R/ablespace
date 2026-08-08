@@ -69,12 +69,15 @@ export class Task {
   labelIds: Types.ObjectId[];
 
   /**
-   * Free-form team tags. The design surfaces "Teams" on the details panel but
-   * defines no team entity, so this is modelled as simple strings — the
-   * smallest implementation that satisfies the requirement.
+   * Team identifiers shown on the task details panel.
+   *
+   * There is no Team collection: the design surfaces "Teams" but defines no
+   * team entity, so these are stored as plain string identifiers rather than
+   * ObjectId references. That keeps the field usable now and leaves room to
+   * introduce a Team collection later without reshaping the task.
    */
   @Prop({ type: [String], default: [] })
-  teams: string[];
+  teamIds: string[];
 
   @Prop({ type: Date, default: null, index: true })
   dueDate: Date | null;

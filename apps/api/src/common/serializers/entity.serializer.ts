@@ -129,7 +129,7 @@ export function serialiseTask(
     reporter: serialiseUserRef(task.reporterId as MaybePopulated<UserDocument>),
     members: members.filter(isPopulated).map(serialiseUser),
     labels: labels.filter(isPopulated).map(serialiseLabel),
-    teams: task.teams ?? [],
+    teamIds: task.teamIds ?? [],
     dueDate: toIso(task.dueDate),
     resources: (task.resources ?? []).map((resource) => ({
       label: resource.label,

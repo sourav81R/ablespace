@@ -119,7 +119,7 @@ export interface TaskDto {
   reporter: UserDto | null;
   members: UserDto[];
   labels: LabelDto[];
-  teams: string[];
+  teamIds: string[];
   dueDate: string | null;
   resources: ResourceLink[];
   subtaskCount: number;

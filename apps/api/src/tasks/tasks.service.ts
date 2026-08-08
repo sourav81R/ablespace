@@ -240,7 +240,7 @@ export class TasksService {
       priority: dto.priority ?? Priority.NONE,
       memberIds,
       labelIds,
-      teams: dto.teams ?? [],
+      teamIds: dto.teamIds ?? [],
       dueDate: dto.dueDate ?? null,
       resources: dto.resources ?? [],
       completedAt: status === TaskStatus.COMPLETED ? new Date() : null,
@@ -280,8 +280,8 @@ export class TasksService {
       task.priority = dto.priority;
     }
 
-    if (dto.teams !== undefined) {
-      task.teams = dto.teams;
+    if (dto.teamIds !== undefined) {
+      task.teamIds = dto.teamIds;
     }
 
     if (dto.dueDate !== undefined) {

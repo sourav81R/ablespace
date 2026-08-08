@@ -69,12 +69,13 @@ export class CreateTaskDto {
   @IsMongoId({ each: true, message: 'Each label id must be valid' })
   labelIds?: string[];
 
+  /** Team identifiers; stored as plain strings since there is no Team entity. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(10)
   @IsString({ each: true })
   @MaxLength(40, { each: true })
-  teams?: string[];
+  teamIds?: string[];
 
   @IsOptional()
   @Type(() => Date)
