@@ -44,6 +44,17 @@ export interface ApiErrorResponse {
   details: unknown[];
   path: string;
   timestamp: string;
+  /**
+   * The underlying error and its stack.
+   *
+   * Present only outside production, and only for unexpected errors. Never
+   * emitted by a deployed server.
+   */
+  debug?: {
+    name: string;
+    message: string;
+    stack?: string[];
+  };
 }
 
 export interface UserDto {

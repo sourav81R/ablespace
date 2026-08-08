@@ -141,15 +141,24 @@ describe('error envelope', () => {
   });
 
   it('never leaks internals from an unexpected error', () => {
-    const captured = capture();
-    filter.catch(new Error('connection string user:password@host failed'), captured.host);
+    // Pinned to production: outside it the filter deliberately attaches the
+    // real error under `debug` as a development aid. See error-handling.spec.
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
 
-    const body = captured.body();
-    expect(captured.status()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
-    expect(body.code).toBe(ErrorCode.INTERNAL_ERROR);
-    // The raw message and any stack stay in the server log, not the response.
-    expect(body.message).toBe('An unexpected error occurred');
-    expect(JSON.stringify(body)).not.toContain('password');
+    try {
+      const captured = capture();
+      filter.catch(new Error('connection string user:password@host failed'), captured.host);
+
+      const body = captured.body();
+      expect(captured.status()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(body.code).toBe(ErrorCode.INTERNAL_ERROR);
+      // The raw message and any stack stay in the server log, not the response.
+      expect(body.message).toBe('An unexpected error occurred');
+      expect(JSON.stringify(body)).not.toContain('password');
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   it('uses the same field set for every error', () => {

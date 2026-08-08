@@ -94,7 +94,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
+    // Outside production, attach the real error and its stack so a developer
+    // does not have to go hunting in the server log. This block is the only
+    // place internals can reach a response, and it can never run in production.
+    if (!this.isProduction && normalised.isUnexpected && exception instanceof Error) {
+      body.debug = {
+        name: exception.name,
+        message: exception.message,
+        stack: exception.stack?.split('\n').map((line) => line.trim()),
+      };
+    }
+
     response.status(normalised.status).json(body);
+  }
+
+  /**
+   * Read from the environment rather than injected config.
+   *
+   * The filter is constructed by Nest before ConfigService is guaranteed
+   * available to it, and an error thrown during startup must still be handled
+   * safely — so this deliberately has no dependency to fail on.
+   */
+  private get isProduction(): boolean {
+    return process.env.NODE_ENV === 'production';
   }
 
   private normalise(exception: unknown): NormalisedError {
@@ -136,6 +158,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         status: HttpStatus.CONFLICT,
         message: 'That record already exists',
         code: ErrorCode.CONFLICT,
+      };
+    }
+
+    // The database is unreachable or the driver could not select a server.
+    // A 503 tells the client this is transient and worth retrying, rather than
+    // a 500 implying the request itself was at fault.
+    if (this.isConnectivityError(exception)) {
+      return {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        message: 'The service is temporarily unavailable. Please try again.',
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        isUnexpected: true,
       };
     }
 
@@ -206,6 +240,27 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           ? ErrorCode.INTERNAL_ERROR
           : ErrorCode.VALIDATION_ERROR;
     }
+  }
+
+  /**
+   * True for the driver errors that mean "the database is not reachable".
+   *
+   * Matched by error name rather than instanceof, because these come from the
+   * `mongodb` driver — a transitive dependency we do not import directly.
+   */
+  private isConnectivityError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+
+    const name = (error as { name?: string }).name ?? '';
+
+    return (
+      name === 'MongoServerSelectionError' ||
+      name === 'MongoNetworkError' ||
+      name === 'MongoNotConnectedError' ||
+      name === 'MongoTimeoutError'
+    );
   }
 
   private isMongoServerError(error: unknown): error is MongoServerErrorLike {
