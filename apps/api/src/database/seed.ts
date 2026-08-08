@@ -14,7 +14,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ActivityType, AuthProvider, Priority, TaskStatus, WorkspaceRole } from '@ablespace/shared';
+import { ActivityType, AuthProvider, TaskStatus, WorkspaceRole } from '@ablespace/shared';
 import { AppModule } from '../app.module';
 import { User } from '../users/schemas/user.schema';
 import { Workspace } from '../workspaces/schemas/workspace.schema';
@@ -25,18 +25,36 @@ import { Task } from '../tasks/schemas/task.schema';
 import { Subtask } from '../subtasks/schemas/subtask.schema';
 import { Comment } from '../comments/schemas/comment.schema';
 import { Activity } from '../activity/schemas/activity.schema';
+import {
+  COMMENT_SEEDS,
+  FEATURED_TASK_TITLE,
+  LABEL_SEEDS,
+  PROJECT_SEEDS,
+  SUBTASK_SEEDS,
+  TASK_SEEDS,
+} from './seed-data';
 
 const logger = new Logger('Seed');
 
 /** Firebase UID of the demo account, overridable with --uid=. */
 const DEFAULT_DEMO_UID = 'seed-demo-user';
 
-/** Returns a date `days` from now, normalised to midday to avoid TZ edges. */
+/**
+ * The instant every seeded date is measured from.
+ *
+ * Captured once per run and normalised to midday UTC, so two runs on the same
+ * day produce byte-identical dates. Due dates stay relative to "now" rather
+ * than being hard-coded, so a board seeded months from now still shows a
+ * sensible mix of overdue and upcoming work.
+ */
+const SEED_EPOCH = (() => {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0, 0);
+})();
+
+/** A date `days` from the seed epoch. Midday UTC avoids timezone edge cases. */
 function daysFromNow(days: number): Date {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(12, 0, 0, 0);
-  return date;
+  return new Date(SEED_EPOCH + days * 24 * 60 * 60 * 1000);
 }
 
 async function seed(): Promise<void> {
@@ -113,145 +131,33 @@ async function seed(): Promise<void> {
     // ---------------------------------------------------------------------
     // Labels
     // ---------------------------------------------------------------------
-    const labels = await labelModel.insertMany([
-      { workspaceId, name: 'Design', color: '#8B5CF6' },
-      { workspaceId, name: 'Development', color: '#3B82F6' },
-      { workspaceId, name: 'Research', color: '#F59E0B' },
-      { workspaceId, name: 'Bug', color: '#EF4444' },
-      { workspaceId, name: 'Documentation', color: '#10B981' },
-    ]);
+    const labels = await labelModel.insertMany(
+      LABEL_SEEDS.map((label) => ({ ...label, workspaceId })),
+    );
     const labelBy = new Map(labels.map((label) => [label.name, label._id]));
     logger.log(`Created ${labels.length} labels`);
 
     // ---------------------------------------------------------------------
     // Projects
     // ---------------------------------------------------------------------
-    const projects = await projectModel.insertMany([
-      {
+    const projects = await projectModel.insertMany(
+      PROJECT_SEEDS.map((project) => ({
         workspaceId,
-        name: 'Website Redesign',
-        description: 'Refresh the marketing site and design system.',
-        priority: Priority.HIGH,
+        name: project.name,
+        description: project.description,
+        priority: project.priority,
         leadId: user._id,
-        dueDate: daysFromNow(21),
-      },
-      {
-        workspaceId,
-        name: 'Mobile App',
-        description: 'Ship the first release of the companion app.',
-        priority: Priority.MEDIUM,
-        leadId: user._id,
-        dueDate: daysFromNow(45),
-      },
-      {
-        workspaceId,
-        name: 'Internal Tools',
-        description: 'Improve the team dashboard and reporting.',
-        priority: Priority.LOW,
-        leadId: user._id,
-        dueDate: null,
-      },
-    ]);
+        dueDate: project.dueInDays === null ? null : daysFromNow(project.dueInDays),
+      })),
+    );
     const projectBy = new Map(projects.map((project) => [project.name, project._id]));
     logger.log(`Created ${projects.length} projects`);
 
     // ---------------------------------------------------------------------
     // Tasks — spread across all four board columns.
     // ---------------------------------------------------------------------
-    const taskSeeds: Array<{
-      title: string;
-      description: string;
-      status: TaskStatus;
-      priority: Priority;
-      project: string;
-      labels: string[];
-      dueInDays: number | null;
-    }> = [
-      {
-        title: 'Design the new landing page',
-        description: 'Hero, feature grid and pricing section for the refreshed site.',
-        status: TaskStatus.TODO,
-        priority: Priority.HIGH,
-        project: 'Website Redesign',
-        labels: ['Design'],
-        dueInDays: 5,
-      },
-      {
-        title: 'Audit current colour tokens',
-        description: 'List every colour in use and map it onto the new palette.',
-        status: TaskStatus.TODO,
-        priority: Priority.MEDIUM,
-        project: 'Website Redesign',
-        labels: ['Design', 'Research'],
-        dueInDays: 8,
-      },
-      {
-        title: 'Set up authentication flow',
-        description: 'Anonymous and Google sign-in, with token verification server-side.',
-        status: TaskStatus.DOING,
-        priority: Priority.URGENT,
-        project: 'Mobile App',
-        labels: ['Development'],
-        dueInDays: 2,
-      },
-      {
-        title: 'Build the task board',
-        description: 'Four status columns with drag-free status controls.',
-        status: TaskStatus.DOING,
-        priority: Priority.HIGH,
-        project: 'Mobile App',
-        labels: ['Development'],
-        dueInDays: 6,
-      },
-      {
-        title: 'Fix overflow on small screens',
-        description: 'The board scrolls the page body instead of the column container.',
-        status: TaskStatus.DOING,
-        priority: Priority.HIGH,
-        project: 'Website Redesign',
-        labels: ['Bug', 'Development'],
-        dueInDays: 1,
-      },
-      {
-        title: 'Define the API response envelope',
-        description: 'Agree on { data } and { data, meta } across every endpoint.',
-        status: TaskStatus.COMPLETED,
-        priority: Priority.MEDIUM,
-        project: 'Internal Tools',
-        labels: ['Documentation'],
-        dueInDays: -3,
-      },
-      {
-        title: 'Write the database schema',
-        description: 'Users, workspaces, projects, tasks, subtasks, comments, activity.',
-        status: TaskStatus.COMPLETED,
-        priority: Priority.HIGH,
-        project: 'Internal Tools',
-        labels: ['Development', 'Documentation'],
-        dueInDays: -6,
-      },
-      {
-        title: 'Research competitor onboarding',
-        description: 'Compare first-run experiences across three similar products.',
-        status: TaskStatus.ON_HOLD,
-        priority: Priority.LOW,
-        project: 'Website Redesign',
-        labels: ['Research'],
-        dueInDays: 30,
-      },
-      {
-        title: 'Evaluate analytics providers',
-        description: 'Paused until the privacy review is complete.',
-        status: TaskStatus.ON_HOLD,
-        priority: Priority.NONE,
-        project: 'Internal Tools',
-        labels: ['Research'],
-        dueInDays: null,
-      },
-    ];
-
     const createdTasks = await taskModel.insertMany(
-      taskSeeds.map((seedTask) => ({
+      TASK_SEEDS.map((seedTask) => ({
         workspaceId,
         projectId: projectBy.get(seedTask.project) ?? null,
         title: seedTask.title,
@@ -272,59 +178,34 @@ async function seed(): Promise<void> {
     logger.log(`Created ${createdTasks.length} tasks`);
 
     // ---------------------------------------------------------------------
-    // Subtasks, comments and activity on the first in-progress task, so the
-    // detail screen has something real to show.
+    // Subtasks, comments and activity, so the task detail screen has something
+    // real to show. Pinned to a named task rather than "the first DOING one",
+    // so reordering the list above cannot silently move them elsewhere.
     // ---------------------------------------------------------------------
-    const featured = createdTasks.find((task) => task.status === TaskStatus.DOING);
+    const featured = createdTasks.find((task) => task.title === FEATURED_TASK_TITLE);
 
     if (featured) {
-      await subtaskModel.insertMany([
-        {
+      await subtaskModel.insertMany(
+        SUBTASK_SEEDS.map((subtask) => ({
           taskId: featured._id,
           workspaceId,
-          title: 'Enable anonymous sign-in in the Firebase console',
-          status: TaskStatus.COMPLETED,
-          priority: Priority.HIGH,
-          memberId: user._id,
-          dueDate: daysFromNow(-1),
-          order: 0,
-        },
-        {
-          taskId: featured._id,
-          workspaceId,
-          title: 'Verify ID tokens with the Admin SDK',
-          status: TaskStatus.DOING,
-          priority: Priority.URGENT,
-          memberId: user._id,
-          dueDate: daysFromNow(1),
-          order: 1,
-        },
-        {
-          taskId: featured._id,
-          workspaceId,
-          title: 'Handle token refresh on the client',
-          status: TaskStatus.TODO,
-          priority: Priority.MEDIUM,
-          memberId: null,
-          dueDate: daysFromNow(3),
-          order: 2,
-        },
-      ]);
+          title: subtask.title,
+          status: subtask.status,
+          priority: subtask.priority,
+          memberId: subtask.assigned ? user._id : null,
+          dueDate: daysFromNow(subtask.dueInDays),
+          order: subtask.order,
+        })),
+      );
 
-      await commentModel.insertMany([
-        {
+      await commentModel.insertMany(
+        COMMENT_SEEDS.map((body) => ({
           taskId: featured._id,
           workspaceId,
           authorId: user._id,
-          body: 'Anonymous sign-in is enabled. Moving on to server-side verification.',
-        },
-        {
-          taskId: featured._id,
-          workspaceId,
-          authorId: user._id,
-          body: 'Remember that ID tokens expire after an hour — the client needs to refresh.',
-        },
-      ]);
+          body,
+        })),
+      );
     }
 
     // Every task gets a creation event so the activity feed is never empty.
