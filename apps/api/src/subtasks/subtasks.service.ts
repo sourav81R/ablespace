@@ -106,9 +106,11 @@ export class SubtasksService {
           taskId: subtask.taskId,
           workspaceId,
           actorId: auth.user._id,
-          type: ActivityType.SUBTASK_STATUS_CHANGED,
+          type: ActivityType.STATUS_CHANGED,
           metadata: {
-            title: subtask.title,
+            // `subtask` distinguishes this from a status change on the task
+            // itself, which carries the same event type.
+            subtask: subtask.title,
             field: 'status',
             from: previousStatus,
             to: subtask.status,
@@ -121,21 +123,17 @@ export class SubtasksService {
     return serialiseSubtask(subtask);
   }
 
+  /**
+   * Deletes a subtask.
+   *
+   * No activity is recorded: the specified event types have no entry for a
+   * subtask deletion, and inventing one would fabricate history rather than
+   * reflect a real, representable mutation.
+   */
   async remove(auth: AuthContext, subtaskId: string): Promise<void> {
-    const workspaceId = auth.workspace._id;
-    const subtask = await this.requireSubtask(workspaceId, subtaskId);
+    const subtask = await this.requireSubtask(auth.workspace._id, subtaskId);
 
     await this.subtaskModel.deleteOne({ _id: subtask._id }).exec();
-
-    await this.activityService.record([
-      {
-        taskId: subtask.taskId,
-        workspaceId,
-        actorId: auth.user._id,
-        type: ActivityType.SUBTASK_DELETED,
-        metadata: { title: subtask.title },
-      },
-    ]);
   }
 
   /** Places a new subtask at the end of the list. */

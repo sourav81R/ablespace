@@ -33,7 +33,7 @@ describe('diffTaskSnapshots', () => {
     const events = diffTaskSnapshots(base, { ...base, status: 'DOING' }, scope);
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(ActivityType.TASK_STATUS_CHANGED);
+    expect(events[0].type).toBe(ActivityType.STATUS_CHANGED);
     expect(events[0].metadata).toMatchObject({
       field: 'status',
       from: 'TODO',
@@ -50,11 +50,25 @@ describe('diffTaskSnapshots', () => {
 
     expect(events.map((event) => event.type).sort()).toEqual(
       [
-        ActivityType.TASK_PRIORITY_CHANGED,
-        ActivityType.TASK_STATUS_CHANGED,
-        ActivityType.TASK_TITLE_CHANGED,
+        ActivityType.PRIORITY_CHANGED,
+        ActivityType.STATUS_CHANGED,
+        ActivityType.TASK_UPDATED,
       ].sort(),
     );
+  });
+
+  it('distinguishes fields that share the TASK_UPDATED type', () => {
+    // Title, description and project have no dedicated event, so metadata.field
+    // is the only thing separating them.
+    const events = diffTaskSnapshots(
+      base,
+      { ...base, title: 'New title', projectId: 'project-1' },
+      scope,
+    );
+
+    expect(events).toHaveLength(2);
+    expect(events.every((event) => event.type === ActivityType.TASK_UPDATED)).toBe(true);
+    expect(events.map((event) => event.metadata?.field).sort()).toEqual(['project', 'title']);
   });
 
   it('does not include the description body in its event', () => {
@@ -66,7 +80,7 @@ describe('diffTaskSnapshots', () => {
     );
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(ActivityType.TASK_DESCRIPTION_CHANGED);
+    expect(events[0].type).toBe(ActivityType.TASK_UPDATED);
     expect(events[0].metadata).toEqual({ field: 'description' });
   });
 
@@ -84,7 +98,7 @@ describe('diffTaskSnapshots', () => {
     const events = diffTaskSnapshots(base, { ...base, dueDate: null }, scope);
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(ActivityType.TASK_DUE_DATE_CHANGED);
+    expect(events[0].type).toBe(ActivityType.DUE_DATE_CHANGED);
     expect(events[0].metadata?.to).toBeNull();
   });
 
@@ -104,7 +118,7 @@ describe('diffTaskSnapshots', () => {
     );
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(ActivityType.TASK_MEMBERS_CHANGED);
+    expect(events[0].type).toBe(ActivityType.MEMBER_CHANGED);
     expect(events[0].metadata?.to).toEqual(['a', 'b']);
   });
 
@@ -112,7 +126,7 @@ describe('diffTaskSnapshots', () => {
     const events = diffTaskSnapshots(base, { ...base, labelIds: ['x'] }, scope);
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(ActivityType.TASK_LABELS_CHANGED);
+    expect(events[0].type).toBe(ActivityType.LABEL_CHANGED);
   });
 
   it('attaches the scope to every event', () => {

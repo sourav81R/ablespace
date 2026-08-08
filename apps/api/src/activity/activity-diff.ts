@@ -59,30 +59,32 @@ export function diffTaskSnapshots(
     events.push({ ...scope, type, metadata: { field, from, to } });
   };
 
+  // Title, description and project have no dedicated event type, so they are
+  // recorded as TASK_UPDATED with `metadata.field` naming what changed.
   if (before.title !== after.title) {
-    push(ActivityType.TASK_TITLE_CHANGED, 'title', before.title, after.title);
+    push(ActivityType.TASK_UPDATED, 'title', before.title, after.title);
   }
 
   if (before.description !== after.description) {
     // Descriptions can be long; record that it changed, not the whole body.
     events.push({
       ...scope,
-      type: ActivityType.TASK_DESCRIPTION_CHANGED,
+      type: ActivityType.TASK_UPDATED,
       metadata: { field: 'description' },
     });
   }
 
   if (before.status !== after.status) {
-    push(ActivityType.TASK_STATUS_CHANGED, 'status', before.status, after.status);
+    push(ActivityType.STATUS_CHANGED, 'status', before.status, after.status);
   }
 
   if (before.priority !== after.priority) {
-    push(ActivityType.TASK_PRIORITY_CHANGED, 'priority', before.priority, after.priority);
+    push(ActivityType.PRIORITY_CHANGED, 'priority', before.priority, after.priority);
   }
 
   if (!datesEqual(before.dueDate, after.dueDate)) {
     push(
-      ActivityType.TASK_DUE_DATE_CHANGED,
+      ActivityType.DUE_DATE_CHANGED,
       'dueDate',
       before.dueDate ? before.dueDate.toISOString() : null,
       after.dueDate ? after.dueDate.toISOString() : null,
@@ -90,15 +92,15 @@ export function diffTaskSnapshots(
   }
 
   if (before.projectId !== after.projectId) {
-    push(ActivityType.TASK_PROJECT_CHANGED, 'project', before.projectId, after.projectId);
+    push(ActivityType.TASK_UPDATED, 'project', before.projectId, after.projectId);
   }
 
   if (!sameMembers(before.memberIds, after.memberIds)) {
-    push(ActivityType.TASK_MEMBERS_CHANGED, 'members', before.memberIds, after.memberIds);
+    push(ActivityType.MEMBER_CHANGED, 'members', before.memberIds, after.memberIds);
   }
 
   if (!sameMembers(before.labelIds, after.labelIds)) {
-    push(ActivityType.TASK_LABELS_CHANGED, 'labels', before.labelIds, after.labelIds);
+    push(ActivityType.LABEL_CHANGED, 'labels', before.labelIds, after.labelIds);
   }
 
   return events;
