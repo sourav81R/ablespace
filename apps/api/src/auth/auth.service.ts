@@ -53,7 +53,7 @@ export class AuthService {
   private async findOrCreateUser(claims: FirebaseUser): Promise<UserDocument> {
     const existing = await this.userModel.findOne({ firebaseUid: claims.uid }).exec();
     if (existing) {
-      return existing;
+      return this.syncProviderProfile(existing, claims);
     }
 
     const profile = this.profileFromClaims(claims);
@@ -102,6 +102,77 @@ export class AuthService {
       username: claims.isAnonymous ? `guest-${claims.uid.slice(0, 6).toLowerCase()}` : null,
       title: null,
     };
+  }
+
+  /**
+   * Keeps an existing user's provider-owned fields in step with Firebase.
+   *
+   * Two cases matter:
+   *
+   *  - A Google user changes their name or photo in their Google account. The
+   *    token carries the new values, so we adopt them.
+   *  - An anonymous account is upgraded to Google (Firebase `linkWithCredential`
+   *    keeps the same UID). The record must stop being a guest and gain the
+   *    email, name and avatar it now has.
+   *
+   * Fields the user owns in *our* product — `title`, `username`, and a `name`
+   * they have edited themselves — are never overwritten by provider data.
+   * Anonymous tokens carry no profile claims at all, so a guest is left alone.
+   */
+  private async syncProviderProfile(
+    user: UserDocument,
+    claims: FirebaseUser,
+  ): Promise<UserDocument> {
+    // Nothing to sync from an anonymous token: it has no email, name or photo.
+    if (claims.isAnonymous) {
+      return user;
+    }
+
+    const wasGuest = user.isGuest;
+    let changed = false;
+
+    // The account was upgraded from anonymous to a real provider.
+    if (wasGuest) {
+      user.isGuest = false;
+      user.provider = claims.provider;
+      changed = true;
+    } else if (user.provider !== claims.provider) {
+      user.provider = claims.provider;
+      changed = true;
+    }
+
+    if (claims.email && claims.email !== user.email) {
+      user.email = claims.email;
+      changed = true;
+    }
+
+    // Adopt the provider's name only while the user has not set their own.
+    // After an upgrade the placeholder guest name must be replaced.
+    if (claims.name && (wasGuest || !user.name || user.name === 'User')) {
+      user.name = claims.name;
+      changed = true;
+    }
+
+    // Same rule for the avatar: provider data fills a gap, never overwrites a
+    // picture the user chose in this product.
+    if (claims.picture && (wasGuest || !user.avatarUrl)) {
+      user.avatarUrl = claims.picture;
+      changed = true;
+    }
+
+    if (!changed) {
+      return user;
+    }
+
+    await user.save();
+
+    if (wasGuest) {
+      this.logger.log(
+        `Upgraded guest ${claims.uid} to ${claims.provider}; workspace and data preserved`,
+      );
+    }
+
+    return user;
   }
 
   /** A stable, human-readable name so guest avatars are not blank. */
