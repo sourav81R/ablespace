@@ -1,0 +1,26 @@
+{
+  "name": "ablespace-task-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AbleSpace Task Management System — Full Stack Developer assessment",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@8.15.7",
+  "scripts": {
+    "dev:api": "pnpm --filter @ablespace/api start:dev",
+    "build": "pnpm --filter @ablespace/shared build && pnpm --filter @ablespace/api build",
+    "build:api": "pnpm --filter @ablespace/api build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "test": "pnpm --filter @ablespace/api test",
+    "test:e2e": "pnpm --filter @ablespace/api test:e2e",
+    "seed": "pnpm --filter @ablespace/api seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  }
+}
