@@ -185,12 +185,20 @@ Browser
                                      └─ authorised resource
 ```
 
-**There is no `POST /auth/guest` and no `POST /auth/logout.`** Sign-in and
-sign-out happen in the browser through the Firebase SDK. The server's single
-entry point is `GET /auth/me`, which verifies the token and — the first time a
-UID is seen — provisions the user, a private workspace, the owner membership and
-a starter set of labels. The operation is idempotent, so every later request
-simply finds what already exists.
+**There is no `POST /auth/guest`.** Firebase Anonymous Authentication handles
+guest login entirely in the browser. The server's entry point is
+`GET /auth/me`, which verifies the token and — the first time a UID is seen —
+provisions the user, a private workspace, the owner membership and a starter
+set of labels. The operation is idempotent, so every later request simply finds
+what already exists.
+
+`POST /auth/logout` exists so the client has one endpoint to call on sign-out,
+but it destroys nothing: the Firebase SDK discards the refresh token in the
+browser, and there is no server-side session. The caller's current ID token
+stays valid until it expires (up to an hour). Forcing immediate invalidation
+would require revoking refresh tokens and enabling `checkRevoked` on every
+request — a network round-trip to Firebase per call, which this application
+does not need.
 
 ### Guest accounts
 
@@ -277,6 +285,7 @@ Error:
 | --- | --- | --- |
 | `GET` | `/health` | Liveness + MongoDB ping (public) |
 | `GET` | `/auth/me` | Current session; provisions on first call |
+| `POST` | `/auth/logout` | Acknowledges sign-out; Firebase clears the session client-side |
 | `GET` | `/users/me` | Current profile |
 | `PATCH` | `/users/me` | Update name, title, username, avatar |
 | `GET` | `/users` | Assignable users in the workspace |
