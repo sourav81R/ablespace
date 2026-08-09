@@ -12,6 +12,7 @@ import {
   DropdownSubmenu,
 } from '@/components/ui/dropdown';
 import { ConfirmDialog } from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/toast';
 import { STATUS_LABELS } from '@/components/ui/badge';
 import { cn } from '@/lib/utils/cn';
 
@@ -35,6 +36,7 @@ export function TaskActionsMenu({
   const updateTask = useUpdateTask(task.id);
   const deleteTask = useDeleteTask();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { notify } = useToast();
 
   return (
     <>
@@ -100,7 +102,15 @@ export function TaskActionsMenu({
                   disabled={task.status === status || updateTask.isPending}
                   onSelect={() => {
                     close();
-                    updateTask.mutate({ status });
+                    updateTask.mutate(
+                      { status },
+                      {
+                        onSuccess: () => notify(`Moved to ${STATUS_LABELS[status]}`),
+                        // The menu has already closed, so a silent failure
+                        // would leave the card looking unchanged for no reason.
+                        onError: (error) => notify(error.message, 'error'),
+                      },
+                    );
                   }}
                 >
                   {STATUS_LABELS[status]}
@@ -128,7 +138,13 @@ export function TaskActionsMenu({
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={() =>
-          deleteTask.mutate(task.id, { onSuccess: () => setConfirmOpen(false) })
+          deleteTask.mutate(task.id, {
+            onSuccess: () => {
+              setConfirmOpen(false);
+              notify('Task deleted');
+            },
+            onError: (error) => notify(error.message, 'error'),
+          })
         }
         title="Delete this task?"
         description={`"${task.title}" and its subtasks, comments and history will be removed permanently.`}

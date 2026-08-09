@@ -7,6 +7,7 @@ import { useLabels, useMembers, useProjects } from '@/lib/api/use-projects';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/toast';
 import { PRIORITY_LABELS, STATUS_LABELS } from '@/components/ui/badge';
 
 /**
@@ -32,6 +33,7 @@ export function TaskFormDialog({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask(task?.id ?? '');
   const mutation = isEditing ? updateTask : createTask;
+  const { notify } = useToast();
 
   const labels = useLabels();
   const members = useMembers();
@@ -77,7 +79,14 @@ export function TaskFormDialog({
       dueDate: dueDate ? new Date(`${dueDate}T12:00:00.000Z`).toISOString() : null,
     };
 
-    mutation.mutate(input, { onSuccess: onClose });
+    mutation.mutate(input, {
+      onSuccess: () => {
+        // The dialog closing is not itself proof the write landed, so a toast
+        // confirms it — the board behind may not visibly change.
+        notify(isEditing ? 'Task updated' : 'Task created');
+        onClose();
+      },
+    });
   };
 
   const toggle = (list: string[], id: string) =>
