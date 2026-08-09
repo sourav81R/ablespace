@@ -6,6 +6,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/auth/auth-provider';
 import { useSession } from '@/lib/api/use-session';
 import { Button } from '@/components/ui/button';
+import { AppShell } from '@/components/layout/app-shell';
 
 /**
  * Guards every authenticated route.
@@ -71,7 +72,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <FullPageSpinner />;
   }
 
-  return <>{children}</>;
+  // The shell mounts only once both gates pass, so navigation and the account
+  // menu never render against a half-resolved session.
+  return <AppShell>{children}</AppShell>;
 }
 
 function FullPageSpinner() {
