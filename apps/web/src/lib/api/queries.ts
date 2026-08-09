@@ -11,13 +11,13 @@ export const queryKeys = {
 
   tasks: {
     all: ['tasks'] as const,
-    list: (filters: Record<string, unknown>) => ['tasks', 'list', filters] as const,
+    list: (filters: object) => ['tasks', 'list', filters] as const,
     detail: (taskId: string) => ['tasks', 'detail', taskId] as const,
   },
 
   projects: {
     all: ['projects'] as const,
-    list: (filters: Record<string, unknown>) => ['projects', 'list', filters] as const,
+    list: (filters: object) => ['projects', 'list', filters] as const,
     detail: (projectId: string) => ['projects', 'detail', projectId] as const,
   },
 
