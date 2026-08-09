@@ -9,8 +9,10 @@
   "packageManager": "pnpm@8.15.7",
   "scripts": {
     "dev:api": "pnpm --filter @ablespace/api start:dev",
-    "build": "pnpm --filter @ablespace/shared build && pnpm --filter @ablespace/api build",
-    "build:api": "pnpm --filter @ablespace/api build",
+    "dev:web": "pnpm --filter @ablespace/web dev",
+    "build": "pnpm --filter @ablespace/shared build && pnpm --filter @ablespace/api build && pnpm --filter @ablespace/web build",
+    "build:api": "pnpm --filter @ablespace/shared build && pnpm --filter @ablespace/api build",
+    "build:web": "pnpm --filter @ablespace/shared build && pnpm --filter @ablespace/web build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
