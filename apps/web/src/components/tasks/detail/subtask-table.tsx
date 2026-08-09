@@ -60,8 +60,11 @@ export function SubtaskTable({ taskId }: { taskId: string }) {
         }
       >
         {(items) => (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-xs">
+          // Five columns need more room than a 320px screen offers, so the
+          // table scrolls inside this container rather than crushing its cells
+          // or pushing the page sideways.
+          <div className="scrollbar-thin overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[520px] text-xs">
               <thead className="border-b border-border bg-muted/40 text-left">
                 <tr className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th scope="col" className="px-3 py-2">Task</th>

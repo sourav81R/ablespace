@@ -82,6 +82,10 @@ export function Dropdown({
           role="menu"
           className={cn(
             'absolute z-50 mt-1 min-w-[200px] animate-slide-up rounded-lg border border-border bg-popover p-1 shadow-lg',
+            // A fixed panel width overflows a 320px screen once the trigger is
+            // inset. Capping at the viewport keeps every menu reachable
+            // without giving each one a bespoke mobile width.
+            'max-w-[calc(100vw-2rem)]',
             align === 'end' ? 'right-0' : 'left-0',
             className,
           )}

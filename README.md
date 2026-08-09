@@ -3,7 +3,11 @@
 Full Stack Developer (Fresher) technical assessment — a task/project management
 application built with Next.js, NestJS and MongoDB.
 
-**Status:** the backend API is complete. The web client is not yet implemented.
+**Status:** backend and web client are both implemented. See
+[Verification status](#verification-status) for what has been confirmed
+running, and [Intentional deviations](#intentional-deviations-from-the-supplied-documents)
+for where the implementation departs from the brief — the visual design in
+particular.
 
 ---
 
@@ -16,7 +20,9 @@ application built with Next.js, NestJS and MongoDB.
 | Authentication | Firebase Authentication + Firebase Admin SDK |
 | Validation | class-validator / class-transformer |
 | API style | REST, consistent JSON envelope |
-| Frontend | Next.js (App Router) + Tailwind CSS — *pending* |
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Client state | TanStack Query; filter state in the URL |
+| Icons | Lucide React |
 
 ---
 
@@ -41,8 +47,28 @@ ablespace-task-manager/
 │       │   ├── config/         Environment validation
 │       │   └── database/       Connection module + seed script
 │       └── test/
+│   │
+│   └── web/                    Next.js client
+│       └── src/
+│           ├── app/
+│           │   ├── (auth)/login/          Guest + Google sign-in
+│           │   └── (dashboard)/           Every authenticated route
+│           │       ├── tasks/             Board and list, plus [taskId] detail
+│           │       ├── projects/          Table, plus [projectId] detail
+│           │       └── settings/profile/  Profile and workspace
+│           ├── components/
+│           │   ├── ui/         Primitives: button, dialog, dropdown, toast, states
+│           │   ├── layout/     AppShell, sidebar, mobile drawer, user menu
+│           │   ├── tasks/      Board, list, card, toolbar, detail
+│           │   └── projects/   Project form
+│           └── lib/
+│               ├── api/        Client, query hooks, query keys
+│               ├── auth/       AuthProvider
+│               ├── firebase/   Web SDK, isolated here
+│               ├── theme/      Mode + accent tokens, pre-paint script
+│               └── tasks/      URL-backed filter state
 ├── packages/
-│   └── shared/                 Enums + API contract types shared with the web app
+│   └── shared/                 Enums + API contract types shared by both apps
 └── docs/                       PRD, architecture, plan, task breakdown
 ```
 
@@ -71,30 +97,45 @@ resolve `@ablespace/shared` to its compiled output.
 
 ```bash
 cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
 ```
 
 Fill in the values described in [Environment variables](#environment-variables).
+The API needs the Firebase **Admin** credentials (a server-side secret); the web
+app needs the Firebase **web** config (public by design).
 
-### 3. Run
+### 3. Enable Anonymous sign-in
+
+In the Firebase console: **Authentication → Sign-in method → Anonymous →
+Enable**. Guest login cannot work without it — `signInAnonymously` returns
+`auth/admin-restricted-operation`. Enable **Google** there too if you want that
+button to work.
+
+### 4. Run
+
+Two processes, in separate terminals:
 
 ```bash
 pnpm dev:api          # http://localhost:4000/api
+pnpm dev:web          # http://localhost:3000
 ```
 
-Verify it is up:
+Verify the API is up before using the client:
 
 ```bash
 curl http://localhost:4000/api/health
 ```
 
-### 4. Seed demo data (optional)
+A healthy response reports `database: "up"` and `auth: "configured"`.
+
+### 5. Seed demo data (optional)
 
 ```bash
 pnpm seed                          # seeds the built-in demo user
 pnpm seed -- --uid=<firebaseUid>   # seeds a specific Firebase account
 ```
 
-Seeding creates three projects, nine tasks spread across all four board columns,
+Seeding creates three projects, eleven tasks spread across all four board columns,
 five labels, plus subtasks, comments and activity on one task. It is safe to
 re-run: the target workspace is cleared first.
 
@@ -453,23 +494,49 @@ Integration tests against a real database are **not** included yet; see
 
 ## Verification status
 
-What has been confirmed in this environment:
+What has been confirmed by running it, not by inspection:
+
+### Backend
+
+| Check | Result |
+| --- | --- |
+| `pnpm lint` | Passes, zero warnings |
+| `pnpm typecheck` | Passes, zero errors |
+| `pnpm test` | 228/228 tests pass across 18 suites |
+| `pnpm build` | Emits `apps/api/dist/main.js` |
+| MongoDB Atlas | Connects; `/api/health` reports `database: up` |
+| Firebase Admin | Initialises for `ablespace-c0b4d`; rejects invalid tokens |
+| Route registration | 22/22 specified routes register at the expected paths |
+| Protected routes | Return `401` unauthenticated, `404` for another workspace's ids |
+
+Filtering and search were exercised against the running API with 11 seeded
+tasks, stubbing only Firebase token verification so the guard, provisioning,
+DTO validation, service layer and database all ran for real:
+
+| Query | Result |
+| --- | --- |
+| `?status=TODO&priority=HIGH` | 11 → 1 |
+| `?status=TODO,DOING` | 11 → 6 |
+| `?search=Documentation` | 1 — matched on title |
+| `?search=sandbox` | 1 — matched on description only |
+| `?search=Design` | 2 — matched on label name |
+| `?status=DOING&search=Login` | 1 — combined |
+| `?status=NOPE`, `?sortBy=title` | `400` — rejected |
+
+### Frontend
 
 | Check | Result |
 | --- | --- |
 | `tsc --noEmit` | Passes, zero errors |
-| `eslint --max-warnings 0` | Passes, zero warnings |
-| `nest build` | Succeeds, emits `dist/main.js` |
-| `jest` | 35/35 tests pass |
-| Route registration | All 30 routes register at the expected paths |
-| Module graph | Loads without circular-dependency errors |
+| `next lint --max-warnings 0` | Passes, zero warnings |
+| `next build` | Compiles; all 8 routes build |
 
-**Not yet verified:** a live request against MongoDB Atlas. The development
-sandbox blocks Node's DNS `SRV` lookups and intercepts the TLS handshake to
-Atlas, so the connection could not be exercised here — TCP to the cluster
-succeeds, but server selection times out. The credentials and connection string
-are configured; this needs one `pnpm dev:api` run followed by
-`curl localhost:4000/api/health` on an unrestricted network to confirm.
+**Not verified in this environment:** the application rendered in a browser.
+Guest sign-in requires Anonymous authentication to be enabled in the Firebase
+console, which it is not on the project as supplied, so the authenticated
+screens could not be exercised end to end from here. The API side of that flow
+*is* verified — token verification, just-in-time provisioning, workspace
+creation and every endpoint the client calls.
 
 ---
 
@@ -477,15 +544,26 @@ are configured; this needs one `pnpm dev:api` run followed by
 
 Stated plainly rather than left to be discovered:
 
-1. **No live database round-trip yet** — see above. Everything else is verified.
-2. **The Firebase Admin credentials are not yet populated.** Until
-   `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` are filled in from the
-   service-account JSON, authenticated routes return `503`.
-3. **No integration or E2E tests.** `mongodb-memory-server` could not download
-   its MongoDB binary in this environment. The intended coverage — guest
-   provisioning, task CRUD, each filter facet, and cross-workspace access denial
-   — is specified in `docs/PROJECT_PLAN.md` §18.
-4. **The web client is not built.** This phase covered the backend only.
+1. **The UI does not match the Figma.** The design file is login-gated and no
+   screenshots were supplied, so every screen was built from the PRD's prose.
+   Structure and behaviour follow the brief; spacing, type scale and exact
+   colours are an interpretation. See
+   [Intentional deviations](#intentional-deviations-from-the-supplied-documents)
+   — this is the most significant gap in the project.
+2. **Anonymous sign-in is disabled on the Firebase project as supplied.** Guest
+   login therefore cannot complete until it is enabled in the console. The code
+   path is finished and the error is surfaced to the user, not swallowed.
+3. **The client has not been exercised in a browser.** Blocked by (2) in this
+   environment. The API half of every flow is verified.
+4. **No frontend tests, and no backend integration or E2E tests.**
+   `mongodb-memory-server` could not download its MongoDB binary here, so the
+   backend suite is unit-level (228 tests). The intended integration coverage is
+   specified in `docs/PROJECT_PLAN.md` §18.
+5. **No drag and drop on the board.** Status changes go through a menu, which
+   is keyboard- and touch-accessible; the PRD lists dragging as an optional
+   enhancement.
+6. **Not deployed.** The assessment requires a live URL; that step has not been
+   run.
 
 ---
 
@@ -519,6 +597,58 @@ because the UI expects substring matching as the user types — `$text` is
 word-and-stem based and would not match `api` inside `rapid`. At assessment
 data volumes this is the correct trade-off; at large scale, Atlas Search would
 be the right replacement.
+
+### Frontend
+
+**The visual design is an interpretation, not a reproduction of the Figma.**
+This is the most significant deviation in the project and it deserves to be
+stated plainly.
+
+The Figma file referenced by the assessment
+(`figma.com/design/obONCFmoTFN27V5H9PHS2X/Assessment-Task`) requires an
+authenticated session; fetching it returns a login shell with no design data.
+No screenshots or exported frames were supplied with the repository. Every
+screen was therefore built from the prose descriptions in `docs/PRD.md` — for
+example §26's "thin borders, compact SaaS controls, small rounded corners,
+muted secondary text".
+
+What that means in practice:
+
+- **Structure, hierarchy and behaviour follow the specification.** The screens,
+  their components, the fields on each, and the interactions between them are
+  as described.
+- **Exact spacing, type scale, colour values, border radii and icon choices are
+  my own.** They will not match the Figma pixel for pixel.
+
+The design system is built to make this correctable cheaply: every colour
+resolves through a semantic CSS variable and the type and radius scales are
+defined once in `tailwind.config.ts`. Retrofitting the real values is an edit
+to those token definitions, not a rewrite of the components.
+
+**Guest login requires Anonymous sign-in to be enabled in the Firebase
+console.** It is disabled on the project as supplied — `signInAnonymously`
+returns `auth/admin-restricted-operation`. The code is complete and the failure
+is surfaced to the user rather than swallowed, but the toggle at
+Firebase Console → Authentication → Sign-in method → Anonymous must be on for
+"Continue as Guest" to work.
+
+**Email sign-in is shown but disabled.** The design includes an email field, so
+it is rendered, but no password provider is enabled on the Firebase project.
+Rather than fail on submit, the field is disabled and explains why.
+
+**Task status changes use a menu rather than drag and drop.** The PRD lists
+drag and drop as a recommended enhancement "if it can be implemented reliably
+without compromising accessibility". A "Move to" submenu is keyboard- and
+touch-accessible; if dragging is added later it calls the same `PATCH
+/tasks/:id`.
+
+**Profile picture is set by URL, not upload.** There is no file storage in this
+system, and an upload control would promise one that does not exist.
+
+**"Teams" and "Reporter" are read-only on the task detail panel.** Reporter is
+assigned by the server from the verified session. Teams has no entity to pick
+from, so an editor over an empty list would imply a feature that does not
+exist.
 
 ---
 
