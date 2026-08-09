@@ -119,10 +119,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return 'Your browser blocked the sign-in popup. Allow popups and try again.';
       case 'auth/network-request-failed':
         return 'Network error. Check your connection and try again.';
+
+      // Firebase raises `admin-restricted-operation` when anonymous sign-in is
+      // switched off, and `operation-not-allowed` for the other providers.
+      // Both mean the same thing to the user, and neither is worth retrying —
+      // the generic "please try again" actively misleads here.
+      case 'auth/admin-restricted-operation':
       case 'auth/operation-not-allowed':
-        return 'This sign-in method is not enabled for the project.';
+        return 'This sign-in method is disabled for this Firebase project. Enable it under Authentication → Sign-in method in the Firebase console.';
+
       case 'auth/unauthorized-domain':
-        return 'This domain is not authorised in the Firebase console.';
+        return 'This domain is not authorised in the Firebase console. Add it under Authentication → Settings → Authorized domains.';
+
+      case 'auth/api-key-not-valid':
+      case 'auth/invalid-api-key':
+        return 'The Firebase API key is invalid. Check NEXT_PUBLIC_FIREBASE_API_KEY in apps/web/.env.local.';
+
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Wait a moment and try again.';
+
       default:
         return 'Could not sign you in. Please try again.';
     }

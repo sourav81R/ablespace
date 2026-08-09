@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { AlertCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle, ArrowRight, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/auth/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,7 +95,26 @@ export default function LoginPage() {
               className="mb-5 flex gap-2.5 rounded-md border border-danger/30 bg-danger-muted p-3 text-xs text-foreground"
             >
               <AlertCircle className="mt-px h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
-              <span>{error}</span>
+              <div className="min-w-0 space-y-1.5">
+                <p>{error}</p>
+
+                {/*
+                  A disabled provider is a console setting, not something the
+                  user can retry past — so link straight to the page that fixes
+                  it instead of leaving them stuck on a dead button.
+                */}
+                {error.includes('disabled for this Firebase project') && (
+                  <a
+                    href="https://console.firebase.google.com/project/_/authentication/providers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-danger underline underline-offset-2"
+                  >
+                    Open Firebase Authentication settings
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </a>
+                )}
+              </div>
             </div>
           )}
 
