@@ -12,15 +12,14 @@ import { useAuth } from '@/lib/auth/auth-provider';
  */
 export default function HomePage() {
   const router = useRouter();
-  const { status } = useAuth();
+  const { loading, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      router.replace('/tasks');
-    } else if (status === 'unauthenticated') {
-      router.replace('/login');
-    }
-  }, [status, router]);
+    // Wait for the restore to finish: redirecting while loading would bounce a
+    // signed-in user to the login screen before Firebase reports them.
+    if (loading) return;
+    router.replace(isAuthenticated ? '/tasks' : '/login');
+  }, [loading, isAuthenticated, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

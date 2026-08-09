@@ -19,7 +19,7 @@ import { useAuth } from '../auth/auth-provider';
  * can be fetched until this resolves.
  */
 export function useSession() {
-  const { user, status } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery<SessionDto, ApiError>({
     queryKey: queryKeys.session,
@@ -27,7 +27,7 @@ export function useSession() {
 
     // Only ask once Firebase has actually produced a user, otherwise the
     // request goes out with no token and comes back 401.
-    enabled: status === 'authenticated' && Boolean(user),
+    enabled: isAuthenticated,
 
     // The session rarely changes within a visit, and every mutation that could
     // affect it invalidates the key explicitly.

@@ -17,15 +17,37 @@ import { setTokenProvider } from '../api/client';
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
 interface AuthContextValue {
+  /** The Firebase user, or null when signed out. */
   user: User | null;
+
+  /** True until Firebase has finished restoring any stored session. */
+  loading: boolean;
+
+  isAuthenticated: boolean;
+
+  /** True for a guest account created by Firebase Anonymous Authentication. */
+  isAnonymous: boolean;
+
+  signInGuest: () => Promise<void>;
+  signInGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+
+  /**
+   * The underlying lifecycle state.
+   *
+   * `loading` and `isAuthenticated` cover most needs, but a route guard has to
+   * distinguish "still checking" from "definitely signed out" — collapsing
+   * those into one boolean would redirect people mid-restore.
+   */
   status: AuthStatus;
+
   /** Set when a sign-in attempt fails, for display on the login screen. */
   error: string | null;
-  signInAsGuest: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
+
   /** True while a sign-in call is in flight, for button loading states. */
   pending: boolean;
+
+  /** False when the Firebase env vars are missing. */
   configured: boolean;
 }
 
@@ -67,11 +89,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus(nextUser ? 'authenticated' : 'unauthenticated');
     });
 
-    // The API client asks for a token per request. `getIdToken()` returns the
-    // cached one and only hits the network when it is close to expiring.
-    setTokenProvider(async () => {
+    /**
+     * The one place a token is produced.
+     *
+     * The API client asks per request; `getIdToken()` returns the cached token
+     * and only hits the network when it is close to expiring, so this is cheap.
+     * `forceRefresh` is passed straight through and used only after a 401.
+     */
+    setTokenProvider(async (forceRefresh = false) => {
       const current = getFirebaseAuth().currentUser;
-      return current ? current.getIdToken() : null;
+      return current ? current.getIdToken(forceRefresh) : null;
     });
 
     return unsubscribe;
@@ -101,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signInAsGuest = useCallback(async () => {
+  const signInGuest = useCallback(async () => {
     setPending(true);
     setError(null);
     try {
@@ -114,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [describeError]);
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInGoogle = useCallback(async () => {
     setPending(true);
     setError(null);
     try {
@@ -141,15 +168,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       user,
+      loading: status === 'loading',
+      isAuthenticated: status === 'authenticated' && user !== null,
+      // Read from the Firebase user rather than tracked separately, so it can
+      // never drift — and it flips to false automatically if a guest account is
+      // later linked to Google.
+      isAnonymous: user?.isAnonymous ?? false,
+      signInGuest,
+      signInGoogle,
+      logout,
       status,
       error,
-      signInAsGuest,
-      signInWithGoogle,
-      logout,
       pending,
       configured,
     }),
-    [user, status, error, signInAsGuest, signInWithGoogle, logout, pending, configured],
+    [user, status, error, signInGuest, signInGoogle, logout, pending, configured],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

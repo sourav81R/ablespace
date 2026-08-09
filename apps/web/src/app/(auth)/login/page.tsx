@@ -18,19 +18,20 @@ import { GoogleIcon } from '@/components/ui/icons';
  */
 export default function LoginPage() {
   const router = useRouter();
-  const { status, error, pending, signInAsGuest, signInWithGoogle, configured } = useAuth();
+  const { loading, isAuthenticated, error, pending, signInGuest, signInGoogle, configured } =
+    useAuth();
   const [email, setEmail] = useState('');
 
   // A signed-in user landing here (say, from a bookmark) belongs in the app.
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (isAuthenticated) {
       router.replace('/tasks');
     }
-  }, [status, router]);
+  }, [isAuthenticated, router]);
 
   const handleGuest = async () => {
     try {
-      await signInAsGuest();
+      await signInGuest();
       router.replace('/tasks');
     } catch {
       // AuthProvider has already turned this into a readable message.
@@ -39,7 +40,7 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     try {
-      await signInWithGoogle();
+      await signInGoogle();
       router.replace('/tasks');
     } catch {
       // As above.
@@ -47,7 +48,7 @@ export default function LoginPage() {
   };
 
   // Avoid flashing the form to someone who is already signed in.
-  if (status === 'loading' || status === 'authenticated') {
+  if (loading || isAuthenticated) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
         <div

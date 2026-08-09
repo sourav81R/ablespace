@@ -18,7 +18,7 @@ import { ACCENT_LABELS, ACCENT_SWATCHES, ACCENTS } from '@/lib/theme/theme';
 export default function TasksPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { logout } = useAuth();
+  const { logout, isAnonymous } = useAuth();
   const { mode, accent, toggleMode, setAccent } = useTheme();
 
   if (!session) return null;
@@ -32,7 +32,7 @@ export default function TasksPage() {
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Signed in as {session.user.displayName}
-            {session.user.isAnonymous ? ' (guest)' : ''}
+            {isAnonymous ? ' (guest)' : ''}
           </p>
         </div>
 

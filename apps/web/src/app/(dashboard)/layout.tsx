@@ -16,17 +16,18 @@ import { Button } from '@/components/ui/button';
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { status, logout } = useAuth();
+  const { loading, isAuthenticated, logout } = useAuth();
   const session = useSession();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (!loading && !isAuthenticated) {
       router.replace('/login');
     }
-  }, [status, router]);
+  }, [loading, isAuthenticated, router]);
 
-  // Firebase is still restoring the session from storage.
-  if (status === 'loading' || status === 'unauthenticated') {
+  // Firebase is still restoring the session, or the redirect above is about to
+  // fire. Either way there is nothing safe to render yet.
+  if (loading || !isAuthenticated) {
     return <FullPageSpinner />;
   }
 

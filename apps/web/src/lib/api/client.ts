@@ -9,8 +9,13 @@ import type { ApiErrorResponse, ApiListResponse, ApiResponse } from '@ablespace/
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
-/** Supplies the current Firebase ID token; installed by AuthProvider. */
-type TokenProvider = () => Promise<string | null>;
+/**
+ * Supplies the current Firebase ID token; installed by AuthProvider.
+ *
+ * `forceRefresh` bypasses the SDK's cache. It is used only after a 401, since
+ * an unconditional refresh would add a network round-trip to every request.
+ */
+type TokenProvider = (forceRefresh?: boolean) => Promise<string | null>;
 
 let tokenProvider: TokenProvider = async () => null;
 
@@ -99,25 +104,32 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 /**
- * Performs a request and unwraps the `{ data }` envelope.
+ * Sends the request, attaching the current ID token.
  *
- * A 401 is retried once with a force-refreshed token. Firebase ID tokens last
- * an hour, and a tab left open across that boundary would otherwise see its
- * next request fail for no reason the user could understand.
+ * Every outbound call funnels through here, which is what keeps token handling
+ * out of components entirely — no component ever sees a token, let alone sets
+ * an Authorization header.
+ *
+ * A 401 is retried exactly once with a force-refreshed token. Firebase ID
+ * tokens last an hour; a tab left open across that boundary would otherwise
+ * see its next request fail for no reason the user could understand. If the
+ * retry also fails, the session is genuinely over and the error surfaces so
+ * the route guard can send the user back to sign in.
  */
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function send(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, params, signal } = options;
+  const url = buildUrl(path, params);
 
-  const send = async (forceRefresh: boolean): Promise<Response> => {
-    const token = forceRefresh
-      ? await tokenProvider().catch(() => null)
-      : await tokenProvider().catch(() => null);
+  const attempt = async (forceRefresh: boolean): Promise<Response> => {
+    // A failure to mint a token is not fatal: the request proceeds without one
+    // and the API answers 401, which is the same outcome by a clearer route.
+    const token = await tokenProvider(forceRefresh).catch(() => null);
 
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    return fetch(buildUrl(path, params), {
+    return fetch(url, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -128,8 +140,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   let response: Response;
   try {
-    response = await send(false);
+    response = await attempt(false);
   } catch (cause) {
+    // An aborted request is the caller's own doing — usually a superseded
+    // query — and must not be reported as a network failure.
     if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
     throw new ApiError(
       'Could not reach the server. Check your connection and try again.',
@@ -139,15 +153,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (response.status === 401) {
-    // One retry with a fresh token; if it still fails the session is genuinely
-    // over and the caller should send the user back to sign in.
-    response = await send(true).catch(() => response);
+    try {
+      response = await attempt(true);
+    } catch {
+      // Keep the original 401 rather than masking it with a network error.
+    }
   }
+
+  return response;
+}
+
+/** Performs a request and unwraps the `{ data }` envelope. */
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
 
   if (!response.ok) {
     throw await toApiError(response);
   }
 
+  // 204 carries no body; parsing it would throw.
   if (response.status === 204) {
     return undefined as T;
   }
@@ -156,35 +180,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return payload.data;
 }
 
-/** A list response, keeping `meta` alongside the items. */
+/** A list response, keeping `meta` alongside the items for pagination. */
 async function requestList<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiListResponse<T>> {
-  const { method = 'GET', body, params, signal } = options;
-
-  const token = await tokenProvider().catch(() => null);
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  let response: Response;
-  try {
-    response = await fetch(buildUrl(path, params), {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
-      cache: 'no-store',
-    });
-  } catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
-    throw new ApiError(
-      'Could not reach the server. Check your connection and try again.',
-      0,
-      'NETWORK_ERROR',
-    );
-  }
+  const response = await send(path, options);
 
   if (!response.ok) {
     throw await toApiError(response);
