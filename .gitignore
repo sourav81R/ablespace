@@ -42,3 +42,7 @@ Thumbs.db
 # Misc
 .cache/
 .turbo/
+
+# Next.js
+.next/
+next-env.d.ts

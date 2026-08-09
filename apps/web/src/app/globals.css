@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * Two independent axes compose here:
+ *   - mode   : light | dark          -> `class="dark"` on <html>
+ *   - accent : amber|blue|pink|rose|emerald|black -> `data-accent` on <html>
+ *
+ * Mode owns the surfaces (background, card, border, text). Accent owns only
+ * the interactive colour (primary, ring). Keeping them separate is why any of
+ * the twelve combinations works without a special case.
+ */
+
+@layer base {
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --radius: 0.5rem;
+
+    /* Surfaces — light */
+    --background: 0 0% 100%;
+    --foreground: 224 15% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 15% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 15% 12%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+
+    /* Semantic status colours, shared by both modes */
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
+    --danger-muted: 0 86% 97%;
+    --success: 142 71% 40%;
+    --success-muted: 138 76% 96%;
+    --warning: 38 92% 50%;
+    --warning-muted: 48 96% 95%;
+    --info: 217 91% 60%;
+    --info-muted: 214 95% 96%;
+  }
+
+  .dark {
+    --background: 224 20% 9%;
+    --foreground: 210 20% 96%;
+    --card: 224 18% 12%;
+    --card-foreground: 210 20% 96%;
+    --popover: 224 18% 13%;
+    --popover-foreground: 210 20% 96%;
+    --muted: 223 15% 17%;
+    --muted-foreground: 218 11% 62%;
+    --border: 223 14% 20%;
+    --input: 223 14% 22%;
+
+    --danger: 0 72% 58%;
+    --danger-foreground: 0 0% 100%;
+    --danger-muted: 0 40% 17%;
+    --success: 142 65% 45%;
+    --success-muted: 142 40% 15%;
+    --warning: 38 92% 55%;
+    --warning-muted: 38 45% 17%;
+    --info: 217 91% 65%;
+    --info-muted: 217 45% 18%;
+  }
+
+  /* ---------------------------------------------------------------------
+   * Accents. Each sets only the interactive colour, so it composes with
+   * either mode. `--primary-muted` is the tinted background used by active
+   * navigation and selected rows.
+   * ------------------------------------------------------------------ */
+
+  [data-accent='emerald'] {
+    --primary: 160 84% 32%;
+    --primary-hover: 160 84% 27%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 152 76% 95%;
+    --accent: 160 84% 32%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 160 84% 32%;
+  }
+  .dark[data-accent='emerald'] {
+    --primary: 158 64% 44%;
+    --primary-hover: 158 64% 39%;
+    --primary-muted: 160 50% 15%;
+    --ring: 158 64% 44%;
+  }
+
+  [data-accent='blue'] {
+    --primary: 221 83% 53%;
+    --primary-hover: 221 83% 47%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 214 95% 96%;
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 221 83% 53%;
+  }
+  .dark[data-accent='blue'] {
+    --primary: 217 91% 60%;
+    --primary-hover: 217 91% 55%;
+    --primary-muted: 220 50% 18%;
+    --ring: 217 91% 60%;
+  }
+
+  [data-accent='amber'] {
+    --primary: 35 92% 45%;
+    --primary-hover: 35 92% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 48 96% 93%;
+    --accent: 35 92% 45%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 35 92% 45%;
+  }
+  .dark[data-accent='amber'] {
+    --primary: 38 92% 55%;
+    --primary-hover: 38 92% 50%;
+    --primary-foreground: 30 40% 10%;
+    --primary-muted: 38 45% 17%;
+    --ring: 38 92% 55%;
+  }
+
+  [data-accent='pink'] {
+    --primary: 330 81% 54%;
+    --primary-hover: 330 81% 48%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 327 73% 97%;
+    --accent: 330 81% 54%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 330 81% 54%;
+  }
+  .dark[data-accent='pink'] {
+    --primary: 330 81% 60%;
+    --primary-hover: 330 81% 55%;
+    --primary-muted: 330 45% 18%;
+    --ring: 330 81% 60%;
+  }
+
+  [data-accent='rose'] {
+    --primary: 347 77% 50%;
+    --primary-hover: 347 77% 44%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 356 100% 97%;
+    --accent: 347 77% 50%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 347 77% 50%;
+  }
+  .dark[data-accent='rose'] {
+    --primary: 347 77% 58%;
+    --primary-hover: 347 77% 53%;
+    --primary-muted: 347 45% 18%;
+    --ring: 347 77% 58%;
+  }
+
+  [data-accent='black'] {
+    --primary: 224 20% 14%;
+    --primary-hover: 224 20% 9%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 220 14% 95%;
+    --accent: 224 20% 14%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 224 20% 14%;
+  }
+  .dark[data-accent='black'] {
+    /* Inverted in dark mode: a black accent on a near-black surface would be
+       invisible, so the primary becomes light and its text dark. */
+    --primary: 210 20% 92%;
+    --primary-hover: 210 20% 84%;
+    --primary-foreground: 224 20% 12%;
+    --primary-muted: 223 15% 20%;
+    --ring: 210 20% 92%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Colours are declared as raw HSL channels so Tailwind's opacity modifiers
+       (bg-primary/10) work. This turns them back into real colours. */
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A visible, consistent focus ring for keyboard users — required by the
+     accessibility criteria and easy to lose to `outline: none`. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Thin scrollbars for the board and dense tables. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+}
