@@ -45,4 +45,7 @@ Thumbs.db
 
 # Next.js
 .next/
+# Dev server output, kept separate so `next build` cannot clobber a running
+# `next dev` — see apps/web/next.config.mjs.
+.next-dev/
 next-env.d.ts
