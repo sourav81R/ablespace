@@ -12,11 +12,23 @@ import type { TaskView } from '@/lib/tasks/use-task-filters';
 import type { TaskFilters } from '@/lib/api/use-tasks';
 
 /**
+ * How long typing must pause before the search is issued.
+ *
+ * 300ms sits mid-range: short enough to feel immediate, long enough that an
+ * average typist produces one request per word rather than one per keystroke.
+ */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
  * Search input with debounce.
  *
  * The field keeps its own state so typing stays responsive, and only pushes to
  * the URL once the user pauses — otherwise every keystroke is a request and a
  * history write.
+ *
+ * The search term itself goes to the API, which matches it against task title,
+ * description and label names in MongoDB. The browser never filters the loaded
+ * page, so a match on task 500 of 500 is still found.
  */
 export function SearchInput({
   value,
@@ -37,7 +49,7 @@ export function SearchInput({
   useEffect(() => {
     if (draft === value) return;
 
-    const timer = setTimeout(() => onChange(draft), 300);
+    const timer = setTimeout(() => onChange(draft), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [draft, value, onChange]);
 
@@ -109,6 +121,53 @@ export function ViewSwitcher({
   );
 }
 
+/** Midnight UTC on the given day, as the API's date filters expect. */
+function dayBoundary(offsetDays: number, endOfDay = false): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  if (endOfDay) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+  return date.toISOString();
+}
+
+/**
+ * Due-date ranges offered in the Fields menu.
+ *
+ * Presets rather than a pair of date pickers: these are the questions people
+ * actually ask of a board, and each maps onto the dueFrom/dueTo the API
+ * already accepts. The ranges are computed on open so "today" stays correct in
+ * a tab left open overnight.
+ */
+const DUE_DATE_PRESETS: Array<{
+  id: string;
+  label: string;
+  range: () => { dueFrom?: string; dueTo?: string };
+}> = [
+  {
+    id: 'overdue',
+    label: 'Overdue',
+    // No lower bound: anything due before today counts.
+    range: () => ({ dueTo: dayBoundary(-1, true) }),
+  },
+  {
+    id: 'today',
+    label: 'Due today',
+    range: () => ({ dueFrom: dayBoundary(0), dueTo: dayBoundary(0, true) }),
+  },
+  {
+    id: 'week',
+    label: 'Due this week',
+    range: () => ({ dueFrom: dayBoundary(0), dueTo: dayBoundary(7, true) }),
+  },
+  {
+    id: 'month',
+    label: 'Due this month',
+    range: () => ({ dueFrom: dayBoundary(0), dueTo: dayBoundary(30, true) }),
+  },
+];
+
 /**
  * The Fields menu: the six filters the design lists.
  *
@@ -147,6 +206,8 @@ export function FieldsMenu({
     filters.labelId ? 1 : 0,
     filters.reporterId ? 1 : 0,
     filters.projectId ? 1 : 0,
+    // A range counts once however many bounds it sets.
+    filters.dueFrom || filters.dueTo ? 1 : 0,
   ].reduce<number>((total, value) => total + (value ?? 0), 0);
 
   return (
@@ -237,6 +298,27 @@ export function FieldsMenu({
               ))}
             </>
           )}
+
+          <DropdownSeparator />
+          <DropdownLabel>Due Date</DropdownLabel>
+          {DUE_DATE_PRESETS.map((preset) => {
+            const range = preset.range();
+            const active = filters.dueFrom === range.dueFrom && filters.dueTo === range.dueTo;
+
+            return (
+              <DropdownItem
+                key={preset.id}
+                selected={active}
+                // Selecting the active preset clears it, so the menu is a
+                // toggle rather than a one-way trip.
+                onSelect={() =>
+                  onChange(active ? { dueFrom: undefined, dueTo: undefined } : range)
+                }
+              >
+                {preset.label}
+              </DropdownItem>
+            );
+          })}
 
           {labels.data && labels.data.length > 0 && (
             <>
