@@ -1,12 +1,16 @@
 'use client';
 
-import { ListTodo, SearchX } from 'lucide-react';
+import { useState } from 'react';
+import { ListTodo, Plus, SearchX } from 'lucide-react';
+import { TaskStatus, type TaskDto } from '@ablespace/shared';
 import { useTasks } from '@/lib/api/use-tasks';
 import { useTaskFilters } from '@/lib/tasks/use-task-filters';
 import { DataState, EmptyState, Skeleton } from '@/components/ui/states';
+import { Button } from '@/components/ui/button';
 import { TaskToolbar } from './task-toolbar';
 import { BoardView } from './board-view';
 import { ListView } from './list-view';
+import { TaskFormDialog } from './task-form-dialog';
 
 /**
  * The tasks screen: toolbar plus whichever view is selected.
@@ -19,6 +23,24 @@ export function TaskWorkspace() {
   const { filters, view, setParams, setView, reset, hasFilters } = useTaskFilters();
   const tasks = useTasks(filters);
 
+  // One dialog serves create and edit: `editing` decides which, and
+  // `defaultStatus` carries the column an Add button belongs to.
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<TaskDto | undefined>();
+  const [defaultStatus, setDefaultStatus] = useState<TaskStatus | undefined>();
+
+  const openCreate = (status?: TaskStatus) => {
+    setEditing(undefined);
+    setDefaultStatus(status);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (task: TaskDto) => {
+    setEditing(task);
+    setDefaultStatus(undefined);
+    setDialogOpen(true);
+  };
+
   return (
     <div className="p-4 sm:p-6">
       <TaskToolbar
@@ -28,6 +50,12 @@ export function TaskWorkspace() {
         onParamsChange={setParams}
         onViewChange={setView}
         onReset={reset}
+        action={
+          <Button size="sm" onClick={() => openCreate()}>
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Add Task</span>
+          </Button>
+        }
       />
 
       <DataState
@@ -50,15 +78,32 @@ export function TaskWorkspace() {
             <EmptyState
               icon={<ListTodo className="h-5 w-5" aria-hidden="true" />}
               title="No tasks yet"
-              description="Run `pnpm seed` to load the demo board."
+              description="Create your first task, or run `pnpm seed` to load the demo board."
+              action={
+                <Button size="sm" onClick={() => openCreate()}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Add Task
+                </Button>
+              }
             />
           )
         }
       >
         {(page) =>
-          view === 'board' ? <BoardView tasks={page.data} /> : <ListView tasks={page.data} />
+          view === 'board' ? (
+            <BoardView tasks={page.data} onAddTask={openCreate} onEditTask={openEdit} />
+          ) : (
+            <ListView tasks={page.data} onAddTask={openCreate} onEditTask={openEdit} />
+          )
         }
       </DataState>
+
+      <TaskFormDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        task={editing}
+        defaultStatus={defaultStatus}
+      />
     </div>
   );
 }

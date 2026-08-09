@@ -5,9 +5,10 @@ import { MessageSquare, ListChecks } from 'lucide-react';
 import type { TaskDto } from '@ablespace/shared';
 import { AvatarGroup } from '@/components/ui/avatar';
 import { DueDateChip, LabelChip, PriorityBadge } from '@/components/ui/badge';
+import { TaskActionsMenu } from './task-actions';
 
 /** A task as it appears in a board column. */
-export function TaskCard({ task }: { task: TaskDto }) {
+export function TaskCard({ task, onEdit }: { task: TaskDto; onEdit: () => void }) {
   return (
     <Link
       href={`/tasks/${task.id}`}
@@ -21,7 +22,10 @@ export function TaskCard({ task }: { task: TaskDto }) {
         </div>
       )}
 
-      <p className="line-clamp-2 text-sm font-medium text-foreground">{task.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="line-clamp-2 min-w-0 text-sm font-medium text-foreground">{task.title}</p>
+        <TaskActionsMenu task={task} onEdit={onEdit} className="-mr-1 -mt-1 shrink-0" />
+      </div>
 
       {task.project && (
         <p className="mt-1 truncate text-2xs text-muted-foreground">{task.project.name}</p>
